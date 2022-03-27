@@ -5,57 +5,86 @@
 
 class Configuration(object):
     def __init__(self):
-        self.GPU = 2
+        # (int) speficy the GPU card for acceleration, default 0
+        self.GPU = 0
         self.FIG_DIR = './figures/'
+
         # Gaussian RBF Mixture
         self.BASE_FUNCTION = 'Gaussian'
+
         # Deterministic Curve Linear
         self.GENERAL = 'Curve'
+
+        # (str) embedding format of adata, e.g. t_sne, u_map, 
+        # if None (default), algorithm will choose one automatically
         self.BASIS = None
+
+        # (int) # of highly variable genes selected for pre-processing, default 2000
+        # consider decreasing to 1500 when # of cells > 10k
         self.N_TOP_GENES = 2000
 
-        self.OFFSET_GENES = False
-        # Exclude cell that have 0 expression in either un/spliced 
-        # When contributing to loss function
-        self.FILTER_CELLS = False
-
-        # Fit inidividual gene
-        self.EXAMINE_GENE = False
-
-        # Cell time restricted to (0, 1) if False, default False
-        self.RESCALE_TIME = False
-        # Ms/Mu or rescaled Ms/Mu based on variance
-        self.RESCALE_DATA = True
-        # Seems to be dynamical original genes? Not exactly the same
+        # (bool) linear regression $R^2$ on extreme quantile (default) or full data (adjusted)
         self.R2_ADJUST = True
 
-        # Set root cell clusters, if using DPT as time initialization
+        # (bool) linear regression $R^2$ with offset, default False
+        # if True, would override self.R2_ADJUST
+        self.OFFSET_GENES = False
+
+        # (bool, experimental) exclude cell that have 0 expression in either un/spliced when contributing to loss function
+        self.FILTER_CELLS = False
+
+        # (bool) 
+        self.EXAMINE_GENE = False
+
+        # (bool, experimental) cell time restricted to (0, 1) if False, default False
+        self.RESCALE_TIME = False
+
+        # (bool) rescaled Mu/Ms as input based on variance, default True 
+        self.RESCALE_DATA = True
+
+        # (str) name root cell cluster 
+        # if specified, use diffusion map based time as initialization, default None
+        # would override self.NUM_REPEAT and have improved performance
         self.IROOT = None
-        # Number of random initializations of time points
-        # Invalid if self.IROOT != None
+
+        # (int, experimental) number of random initializations of time points, default 1
+        # in rare cases, velocity field generated might be reversed, possibly because stably and monotonically changed genes
+        # change this parameter to 2 might do the trick
         self.NUM_REPEAT = 1
+
         # Fitting options under Gaussian model 
-        # '1' = gene-shared time points 
-        # '2' = gene-specific time points 
+        # '1' = Unified-time mode 
+        # '2' = Independent mode
         self.FIT_OPTION = '1'
 
+        # (str, experimental) methods to aggregate time metrix, default 'SVD'
         # Max SVD Raw
         self.DENSITY = 'SVD'
-        # Soft_Reorder Soft Hard
-        self.REORDER_CELL = 'Soft_Reorder'
-        # Aggregate gene-specific time to cell time during fitting
-        self.AGGREGATE_T = True
-        # Only take unspliced counts > 0 when assigning timepoints
-        self.ASSIGN_POS_U = True
 
-        # Useful when DENSITY == 'Max'
+        # (str) whether to reorder cell based on relative positions for time assignment
+        # Soft_Reorder (default) Hard (for Independent mode)
+        self.REORDER_CELL = 'Soft_Reorder'
+
+        # (bool) aggregate gene-specific time to cell time during fitting
+        # controlled by self.FIT_OPTION
+        self.AGGREGATE_T = True
+
+        # (bool, experimental), whether clip negative predictions to 0, default False
+        self.ASSIGN_POS_U = False
+
+        # (int, experimental) window size for sliding smoothing of distribution with highest probability
+        # useful when self.DENSITY == 'Max'
         self.WIN_SIZE = 50
 
-        # learning rate of the main optimizer
+        # (float) learning rate of the main optimizer
         self.LEARNING_RATE = 1e-2
+
+        # (int) maximum iteration rate of main optimizer
         self.MAX_ITER = 10000
 
-        # Use raw un/spliced counts or first order moments
+        # (bool) use raw un/spliced counts or first order moments
         self.USE_RAW = False
-        # Selected genes / All 2000 raw genes
+
+        # (bool) selected genes / All 2000 raw genes
+        # if True, would override self.R2_ADJUST and self.OFFSET_GENES
         self.RAW_GENES = False

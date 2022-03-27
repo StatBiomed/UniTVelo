@@ -10,9 +10,9 @@ try:
     
 except (LookupError, ImportError):
     try:
-        from importlib_metadata import version  # Python < 3.8
+        from importlib_metadata import version 
     except:
-        from importlib.metadata import version  # Python = 3.8
+        from importlib.metadata import version 
     __version__ = version(__name__)
     del version
 
@@ -22,5 +22,4 @@ print (strftime("%Y-%m-%d %H:%M:%S", gmtime()))
 from .main import run_model
 from .config import Configuration
 from .eval_utils import evaluate
-from .velocity_confidence import confidence
 from .gene_influence import influence

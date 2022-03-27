@@ -76,23 +76,23 @@ def plot_range(
     t_right=None
 ):
     """
-    Plotting function of phase portraits of individual genes
-    Calculation of t_left and t_right is still under-development, might not be accurate
+    Plotting function of phase portraits of individual genes.
     
     Args:
-        all_scores (dict{str,list}): 
-            {group name: score list of individual cells}.
-        t_left (float):
-            starting time of phase portraits
-        t_right (float):
-            ending time of phase portraits
-    
-    Returns:
-        dict{str,float}: 
-            Group-wise aggregation scores.
-        float: 
-            score aggregated on all samples
+        gene_name (str): name of that gene to be illusrated, would extend to list of genes in next release
+        adata (AnnData)
+        config_file (.Config class): configuration file used for velocity estimation
+        save_fig (bool): if True, save fig, default False
         
+        show_ax (bool)
+        show_legend (bool)
+        show_details (bool): if True, plot detailed regression results together with estimated temporal change
+        time_metric (str): inferred cell time, default 'latent_time'
+
+        show_temporal (bool, experimental): whether plot temporal changes
+            show_positive (bool, experimental): related to self.ASSIGN_POS_U
+            t_left (float, experimental): starting time of phase portraits
+            t_right (float, experimental): ending time of phase portraits
     """
 
     if config_file == None:
@@ -316,4 +316,3 @@ def plot_compare_llf(adata):
     
     plt.show()
     plt.close()
-# %%

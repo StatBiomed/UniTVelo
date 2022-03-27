@@ -14,8 +14,13 @@ def natural_keys(text):
     return [atoi(c) for c in re.split(r'(\d+)', text)]
 
 class Validation():
-    def __init__(self, adata, time_metric='latent_time_gm') -> None:
+    def __init__(self, adata, time_metric='latent_time') -> None:
         self.adata = adata
+
+        if 'latent_time' not in self.adata.obs.columns:
+            import scvelo as scv
+            scv.tl.latent_time(self.adata, min_likelihood=None)         
+
         self.time_metric = time_metric
         if len(set(adata.obs[adata.uns['label']])) > 20:
             self.palette = 'viridis'
@@ -180,7 +185,7 @@ class Validation():
         self.spliced_time(gene_name)
         self.unspliced_time(gene_name)
 
-def exam_genes(adata, gene_name=None, time_metric='latent_time_gm'):
+def exam_genes(adata, gene_name=None, time_metric='latent_time'):
     display.clear_output(wait=True)
     from .individual_gene import Validation
     examine = Validation(adata, time_metric=time_metric)

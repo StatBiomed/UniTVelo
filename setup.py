@@ -38,7 +38,7 @@ setup(
     long_description_content_type='text/markdown',
     author='Mingze Gao',
     author_email='gmz1229@connect.hku.hk',
-    python_requires='>=3.6.0',
+    python_requires='>=3.7.0',
     url='https://github.com/michaelgmz/UniTVelo',
     packages=find_packages(),
 
@@ -66,7 +66,6 @@ setup(
         'Natural Language :: English',
         'Programming Language :: Python',
         'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3.6',
         'Programming Language :: Python :: 3.7',
         'Programming Language :: Python :: 3.8',
         'Programming Language :: Python :: 3.9',

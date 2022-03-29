@@ -40,7 +40,7 @@ setup(
     author='Mingze Gao',
     author_email='gmz1229@connect.hku.hk',
     python_requires='>=3.7.0',
-    url='https://github.com/michaelgmz/UniTVelo',
+    url='https://github.com/StatBiomed/UniTVelo',
     packages=find_packages(),
 
     entry_points={

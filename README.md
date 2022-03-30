@@ -42,7 +42,7 @@ pip install unitvelo
 or
 
 ```python3
-pip install git+https://github.com/michaelgmz/UniTVelo
+pip install git+https://github.com/StatBiomed/UniTVelo
 ```
 
 ## Getting Started

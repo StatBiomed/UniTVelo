@@ -24,17 +24,16 @@ References
 
 
 .. toctree::
-   :caption: Main
+   :caption: About
    :maxdepth: 1
    :hidden:
    
-   index
    install
    release
    references
 
 .. toctree::
-   :caption: Examples
+   :caption: Tutorials
    :maxdepth: 1
    :hidden:
 

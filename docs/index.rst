@@ -1,11 +1,9 @@
-|PyPI| |Docs| |Build Status|
+|PyPI| |Docs| 
 
 .. |PyPI| image:: https://img.shields.io/pypi/v/unitvelo.svg
     :target: https://pypi.org/project/unitvelo
 .. |Docs| image:: https://readthedocs.org/projects/unitvelo/badge/?version=latest
    :target: https://unitvelo.readthedocs.io
-.. |Build Status| image:: https://travis-ci.org/michaelgmz/unitvelo.svg?branch=master
-   :target: https://travis-ci.org/michaelgmz/unitvelo
    
 ====
 Home
@@ -32,13 +30,15 @@ References
    
    index
    install
-   quick_start
    release
+   references
 
-.. .. toctree::
-..    :caption: Examples
-..    :maxdepth: 1
-..    :hidden:
+.. toctree::
+   :caption: Examples
+   :maxdepth: 1
+   :hidden:
 
-..    brie2_msEAE
-
+   getting_started
+   mouse_erythroid
+   intestinal_organoid
+   human_bonemarrow

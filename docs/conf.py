@@ -86,6 +86,9 @@ author = "Mingze Gao"
 title = "Temporally unified RNA velocity"
 copyright = f"{datetime.now():%Y}, {author}"
 
+# Disable pdf and epub generation
+enable_pdf_build = False
+enable_epub_build = False
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the

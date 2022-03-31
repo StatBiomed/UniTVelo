@@ -30,7 +30,7 @@ sys.path.insert(0, os.path.abspath("_ext"))
 
 from urllib.request import urlretrieve
 
-notebooks_url = "https://github.com/StatBiomed/UniTVelo/blob/main/notebooks/"
+notebooks_url = "https://github.com/StatBiomed/UniTVelo/raw/main/notebooks/"
 notebooks = [
     "Figure2_ErythroidMouse.ipynb",
     "Figure3_BoneMarrow.ipynb",
@@ -40,7 +40,7 @@ for nb in notebooks:
     try:
         urlretrieve(notebooks_url + nb, nb)
     except:
-        pass
+        raise ValueError(f'{nb} cannot be retrieved.')
 
 
 # -- General configuration ------------------------------------------------

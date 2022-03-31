@@ -49,5 +49,5 @@ Arguments:
     utv.pl.plot_range(gene_name, adata, velo, show_ax=True, time_metric='latent_time')
 
 .. _notebooks: https://github.com/StatBiomed/UniTVelo/tree/main/notebooks
-.. _`Mouse Erythroid`: mouse_erythroid.rst
-.. _`Human Bone Marrow`: human_bonemarrow.rst
+.. _`Mouse Erythroid`: Figure2_ErythroidMouse
+.. _`Human Bone Marrow`: Figure3_BoneMarrow

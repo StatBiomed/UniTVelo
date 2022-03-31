@@ -23,20 +23,12 @@ The major features of UniTVelo are,
 
 UniTVelo has proved its robustness in 10 different datasets. Details can be found via our manuscript in bioRxiv which is currently under review [UniTVelo].
 
-
-References
-==========
-
-
-
-
-
 .. toctree::
    :caption: Home
    :maxdepth: 1
    :hidden:
    
-   index
+   about
    install
    release
    references

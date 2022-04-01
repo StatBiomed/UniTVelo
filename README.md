@@ -24,6 +24,8 @@ import tensorflow as tf
 print ("Num GPUs Available: ", len(tf.config.list_physical_devices('GPU')))
 ```
 
+If GPU is not available, UniTVelo will automatically switch to CPU for model fitting or it can be spcified in `config.py` (see `Getting Started` below).
+
 ### Main Module
 
 (Optional) Create a separate conda environment for version control and to avoid potential conflicts.
@@ -68,12 +70,14 @@ velo = utv.config.Configuration()
 velo.R2_ADJUST = True 
 velo.IROOT = None
 velo.FIT_OPTION = '1'
+velo.GPU = 0
 ```
 
 * Arguments:
   * -- `velo.R2_ADJUST` (bool), linear regression R-squared on extreme quantile (default) or full data (adjusted)
   * -- `velo.IROOT` (str), specify root cell cluster would enable diffusion map based time initialization, default None
   * -- `velo.FIT_OPTION` (str), '1' Unified-time mode (default), '2' Independent mode
+  * -- `velo.GPU` (int), specify the GPU card used for fitting, -1 will switch to CPU mode, default 0.
 
 3. Run model (label refers to column name in adata.obs specifying celltypes)
 

@@ -1,6 +1,11 @@
 Release History
 ===============
 
+Version 0.1.3
+-------------
+- Support CPU mode for model fitting
+- Fix bugs in documentations
+
 Version 0.1.2
 -------------
 

@@ -12,6 +12,8 @@ Please use the following scripts to confirm TensorFlow is using the GPU::
     import tensorflow as tf
     print ("Num GPUs Available: ", len(tf.config.list_physical_devices('GPU')))
 
+If GPU is not available, UniTVelo will automatically switch to CPU for model fitting or it can be spcified in `config.py` (see `Getting Started`_).
+
 Main Module
 -----------
 
@@ -44,3 +46,4 @@ If you run into any issues or errors are raised during the installation process,
 .. _CUDA: https://developer.nvidia.com/cuda-downloads
 .. _Anaconda: https://www.anaconda.com/
 .. _GitHub: https://github.com/StatBiomed/UniTVelo
+.. _`Getting Started`: getting_started

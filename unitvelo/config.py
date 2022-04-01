@@ -6,6 +6,7 @@
 class Configuration(object):
     def __init__(self):
         # (int) speficy the GPU card for acceleration, default 0
+        # -1 will switch to CPU mode
         self.GPU = 0
         self.FIG_DIR = './figures/'
 

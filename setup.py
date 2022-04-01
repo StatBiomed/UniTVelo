@@ -21,7 +21,7 @@ REQUIRED = [
     'IProgress',
     'ipywidgets',
     'jupyter',
-    'tensorflow'
+    'tensorflow>=2.4.1'
 ]
 
 here = os.path.abspath(os.path.dirname(__file__))
@@ -30,7 +30,7 @@ with io.open(os.path.join(here, 'README.md'), encoding='utf-8') as f:
 
 setup(
     name='unitvelo',
-    version='0.1.2',
+    version='0.1.3',
     # use_scm_version=True,
     # setup_requires=['setuptools_scm'],
 

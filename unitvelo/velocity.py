@@ -264,22 +264,35 @@ class Velocity:
 
     def fit_curve(self, adata, idx, Ms_scale, Mu_scale, rep=1):
         physical_devices = tf.config.list_physical_devices('GPU')
-        assert self.config.GPU < len(physical_devices), \
-            'Please specify the correct GPU card.'
-        tf.config.set_visible_devices(physical_devices[self.config.GPU], 'GPU')
 
-        os.environ["CUDA_VISIBLE_DEVICES"] = f'{self.config.GPU}'
-        for gpu in physical_devices:
-            tf.config.experimental.set_memory_growth(gpu, True)
+        if len(physical_devices) == 0 or self.config.GPU == -1:
+            tf.config.set_visible_devices([], 'GPU')
+            with tf.device('/cpu:0'):
+                residual, adata = lagrange(
+                    adata, idx=idx,
+                    Ms=Ms_scale, Mu=Mu_scale, 
+                    rep=rep, config=self.config
+                )
 
-        with tf.device(f'/gpu:{self.config.GPU}'):
-            residual, adata = lagrange(
-                adata, idx=idx,
-                Ms=Ms_scale, Mu=Mu_scale, 
-                rep=rep, config=self.config
-            )
+            return residual, adata
 
-        return residual, adata
+        else:
+            assert self.config.GPU < len(physical_devices), \
+                'Please specify the correct GPU card.'
+            tf.config.set_visible_devices(physical_devices[self.config.GPU], 'GPU')
+
+            os.environ["CUDA_VISIBLE_DEVICES"] = f'{self.config.GPU}'
+            for gpu in physical_devices:
+                tf.config.experimental.set_memory_growth(gpu, True)
+
+            with tf.device(f'/gpu:{self.config.GPU}'):
+                residual, adata = lagrange(
+                    adata, idx=idx,
+                    Ms=Ms_scale, Mu=Mu_scale, 
+                    rep=rep, config=self.config
+                )
+
+            return residual, adata
 
     def fit_velo_genes(self, basis='umap', rep=1):
         idx = self.velocity_genes

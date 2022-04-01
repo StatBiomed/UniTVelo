@@ -6,6 +6,11 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Temp data
+data/
+notebooks/data
+notebooks/simulated
+
 # C extensions
 *.so
 

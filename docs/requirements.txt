@@ -10,4 +10,4 @@ sphinx_autodoc_typehints
 # converting notebooks to html
 ipykernel
 sphinx
-nbsphinx
+nbsphinx<=0.8.6

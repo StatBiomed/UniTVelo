@@ -7,9 +7,10 @@ __pycache__/
 *$py.class
 
 # Temp data
-data/
+data
 notebooks/data
-notebooks/simulated
+*.h5ad
+tempdata/
 
 # C extensions
 *.so

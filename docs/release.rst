@@ -1,6 +1,11 @@
 Release History
 ===============
 
+Version 0.1.4
+-------------
+- Add penalty on loss function
+- Support informative gene selection in unified-time mode
+
 Version 0.1.3
 -------------
 - Support CPU mode for model fitting

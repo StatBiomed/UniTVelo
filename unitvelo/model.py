@@ -134,17 +134,24 @@ class Recover_Paras(Model_Utils):
                 - sum(self.s_r2, axis=0) / (2 * self.vars) 
 
         else:
-            self.u_r2 = square(udiff)
-            self.s_r2 = square(sdiff)
+            if iter <= 10000:
+                self.u_r2 = square(udiff)
+                self.s_r2 = square(sdiff)
+                self.se.append(int(sum(self.u_r2 + self.s_r2).numpy()))
+
+            else:
+                self.u_r2 = square(udiff)
+                self.s_r2 = square(sdiff) 
+                self.se.append(int(sum(self.u_r2 + self.s_r2).numpy()))
+                
+                if self.config.REG_LOSS:
+                    self.s_r2 = self.s_r2 + \
+                        std(Ms, axis=0) * 0.075 * exp(-square(args[6] - 0.5) / 1)
 
             self.vars = mean(self.s_r2, axis=0) \
                 - square(mean(tf.math.sign(sdiff) * sqrt(self.s_r2), axis=0))
             self.varu = mean(self.u_r2, axis=0) \
                 - square(mean(tf.math.sign(udiff) * sqrt(self.u_r2), axis=0))
-
-            # self.u_r2 = square(Mu - self.u_func)
-            # self.s_r2 = square(Ms - self.s_func) + \
-            #     std(Ms, axis=0) * 0.1 * exp(-square(args[6] - 0.5) / self.config.REG_SCALE)
 
             self.u_log_likeli = \
                 - (Mu.shape[0] / 2) * log(2 * self.pi * self.varu) \
@@ -153,12 +160,9 @@ class Recover_Paras(Model_Utils):
                 - (Ms.shape[0] / 2) * log(2 * self.pi * self.vars) \
                 - sum(self.s_r2, axis=0) / (2 * self.vars) 
 
-        self.se.append(int(sum(self.u_r2 + self.s_r2).numpy()))
         # print("\r", f'{self.se[-1]:,}', sep=' | ', end="")
 
         return self.get_loss(iter, 
-                            self.s_log_likeli, 
-                            self.u_log_likeli, 
                             sum(self.s_r2, axis=0), 
                             sum(self.u_r2, axis=0))
 
@@ -203,11 +207,12 @@ class Recover_Paras(Model_Utils):
 
                 self.post_utils(iter, self.m_args)
                 break
-
-            self.m_args = self.get_optimal_res(args, self.m_args)
-            self.m_ur2 = self.get_optimal_res(self.u_r2, self.m_ur2)
-            self.m_sr2 = self.get_optimal_res(self.s_r2, self.m_sr2)
-            self.m_ullf = self.get_optimal_res(self.u_log_likeli, self.m_ullf)
+            
+            if iter > 5000:
+                self.m_args = self.get_optimal_res(args, args)
+                self.m_ur2 = self.get_optimal_res(self.u_r2, self.m_ur2)
+                self.m_sr2 = self.get_optimal_res(self.s_r2, self.s_r2)
+                self.m_ullf = self.get_optimal_res(self.u_log_likeli, self.m_ullf)
 
             args_to_optimize = self.get_opt_args(iter, args)
             gradients = tape.gradient(target=obj, sources=args_to_optimize)
@@ -226,7 +231,7 @@ class Recover_Paras(Model_Utils):
         return self.get_interim_t(t_cell), s_derivative.numpy()
 
     def get_optimal_res(self, current, opt):
-        return current if min(self.se) == self.se[-1] else opt
+        return current if min(self.se[5000:]) == self.se[-1] else opt
 
     def post_utils(self, iter, args):
         # Reshape un/spliced variance to (1, ngenes)

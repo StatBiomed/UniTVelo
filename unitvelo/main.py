@@ -38,6 +38,7 @@ def run_model(
         config.REORDER_CELL = 'Soft_Reorder'
         config.AGGREGATE_T = True
         config.ASSIGN_POS_U = False
+        config.REG_LOSS = True
 
     if config.FIT_OPTION == '2':
         config.DENSITY = 'Raw'
@@ -48,6 +49,9 @@ def run_model(
     # if config_file != None and config.FIT_OPTION == '2':
         # config.ASSIGN_POS_U = config.ASSIGN_POS_U == config_file.ASSIGN_POS_U
 
+    config.NUM_REPEAT = config.NUM_REPEAT if config.IROOT == None else 1
+    config.MAX_ITER = config.MAX_ITER if config.MAX_ITER > 10000 else 10000
+
     print ('-------> Model Configuration Settings <-------')
     for ix, item in enumerate(vars(config).items()):
         print ("%s: %s" % item, end=f'\t') if ix % 3 != 0 \
@@ -56,11 +60,11 @@ def run_model(
 
     scv.settings.presenter_view = True
     scv.settings.verbosity = 0
-    scv.settings.figdir = config.FIG_DIR
+    scv.settings.figdir = './figures/'
     scv.settings.file_format_figs = 'png'
 
     replicates, pre = None, 1e15
-    config.NUM_REPEAT = config.NUM_REPEAT if config.IROOT == None else 1
+
     for rep in range(config.NUM_REPEAT):
         adata = scv.read(data_path)
 

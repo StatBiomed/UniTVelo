@@ -27,11 +27,10 @@ def col_minmax(matrix, gene_id=None):
 def exp_args(adata, K=1):
     if adata.uns['base_function'] == 'Gaussian':
         columns = ['a0', 'vars', 'varu', 'h0', 'gamma', 'beta']
-    elif adata.uns['base_function'] in ['RBF']:
-        columns = ['a0', 'vars', 'varu', 'gamma', 'beta']
     else:
         columns = ['vars', 'varu', 'gamma', 'beta']
         columns.extend([f'a{k}' for k in range(K)])
+
     return columns
 
 def is_nan(name=None, data=None, phase=None):
@@ -65,7 +64,7 @@ class Model_Utils():
         self.var_names = var_names
         self.Ms, self.Mu = Ms, Mu
         self.K = 1
-        self.win_size = config.WIN_SIZE
+        self.win_size = 50
         self.config = config
 
     def init_vars(self):
@@ -97,12 +96,6 @@ class Model_Utils():
                     tf.Variable(
                         tf.reshape(init_inter, (1, self.adata.n_vars)), 
                         name='intercept')
-
-        if self.mode == 'RBF':
-            self.t = tf.Variable(ones * 0.5, name='t')
-            self.a = tf.Variable(ones * 0, name='log_a')
-            self.h = tf.Variable(ones * exp(2.), name='h')
-            self.offset = tf.Variable(ones * 0, name='offset')
          
         if self.mode == 'Mixture':
             init_t = np.reshape(np.sort(np.random.uniform(-1, 1, self.K)), (-1, 1))
@@ -156,11 +149,6 @@ class Model_Utils():
                 exp(-exp(args[5]) * square(t_cell - args[6])) + \
                 args[4]
         
-        if self.mode == 'RBF':
-            self.fit_s = args[7] * \
-                exp(-exp(args[5]) * square(t_cell - args[6])) + \
-                args[4]
-        
         if self.mode == 'Mixture':
             fit_s = args[7][0, :] * \
                 exp(-exp(args[5][0, :]) * square(t_cell - args[6][0, :])) + \
@@ -181,10 +169,6 @@ class Model_Utils():
     
     def get_s_deri(self, args, t_cell):
         if self.mode == 'Gaussian':
-            self.s_deri = (self.fit_s - args[4]) * \
-                (-exp(args[5]) * 2 * (t_cell - args[6]))
-        
-        if self.mode == 'RBF':
             self.s_deri = (self.fit_s - args[4]) * \
                 (-exp(args[5]) * 2 * (t_cell - args[6]))
         
@@ -349,13 +333,12 @@ class Model_Utils():
         
         return args_to_optimize
     
-    def get_loss(self, iter, s_log_likeli, u_log_likeli, s_r2, u_r2):
+    def get_loss(self, iter, s_r2, u_r2):
         if iter < self.config.MAX_ITER / 2:
             remain = iter % 400
             loss = s_r2 if remain < 200 else u_r2
         else:
-            loss = s_r2 + u_r2 if self.config.FILTER_CELLS \
-                else - s_log_likeli - u_log_likeli
+            loss = s_r2 + u_r2 
         
         return loss
     

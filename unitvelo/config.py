@@ -8,9 +8,11 @@ class Configuration(object):
         # (int) speficy the GPU card for acceleration, default 0
         # -1 will switch to CPU mode
         self.GPU = 0
-        self.FIG_DIR = './figures/'
 
-        # Gaussian RBF Mixture
+        # (str) relevant path for saving scv plots
+        # self.FIG_DIR = './figures/'
+
+        # Gaussian Mixture
         self.BASE_FUNCTION = 'Gaussian'
 
         # Deterministic Curve Linear
@@ -73,15 +75,19 @@ class Configuration(object):
         # (bool, experimental), whether clip negative predictions to 0, default False
         self.ASSIGN_POS_U = False
 
+        # (bool) regularization on loss function to push peak time away from 0.5
+        # mainly used in unified time mode for linear phase portraits
+        self.REG_LOSS = True
+
         # (int, experimental) window size for sliding smoothing of distribution with highest probability
         # useful when self.DENSITY == 'Max'
-        self.WIN_SIZE = 50
+        # self.WIN_SIZE = 50
 
         # (float) learning rate of the main optimizer
         self.LEARNING_RATE = 1e-2
 
         # (int) maximum iteration rate of main optimizer
-        self.MAX_ITER = 10000
+        self.MAX_ITER = 12000
 
         # (bool) use raw un/spliced counts or first order moments
         self.USE_RAW = False

@@ -160,7 +160,7 @@ class Recover_Paras(Model_Utils):
                 - (Ms.shape[0] / 2) * log(2 * self.pi * self.vars) \
                 - sum(self.s_r2, axis=0) / (2 * self.vars) 
 
-        # print("\r", f'{self.se[-1]:,}', sep=' | ', end="")
+        # print ("\r", f'{self.se[-1]:,}', sep=' | ', end="")
 
         return self.get_loss(iter, 
                             sum(self.s_r2, axis=0), 

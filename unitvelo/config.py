@@ -78,6 +78,10 @@ class Configuration(object):
         # (bool) regularization on loss function to push peak time away from 0.5
         # mainly used in unified time mode for linear phase portraits
         self.REG_LOSS = True
+        # (float) gloablly adjust the magnitude of the penalty, recommend < 0.1
+        self.REG_TIMES = 0.075
+        # (float) scaling parameter of the regularizer
+        self.REG_SCALE = 1
 
         # (int, experimental) window size for sliding smoothing of distribution with highest probability
         # useful when self.DENSITY == 'Max'

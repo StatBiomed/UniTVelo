@@ -77,10 +77,13 @@ def inv_prob(obs, fit):
     temp = np.exp(-temp)
     return temp / np.sum(temp)
 
-def remove_dir(dir_path):
+def remove_dir(data_path, adata):
     import shutil
-    dir = os.path.split(dir_path)[0]
-    NEW_DIR = os.path.join(dir, 'tempdata')
+    dir = os.path.split(data_path)[0]
+    filename = os.path.splitext(os.path.basename(data_path))[0]
+
+    NEW_DIR = os.path.join(dir, filename)
+    adata.uns['temp'] = NEW_DIR
     
     if os.path.exists(NEW_DIR):
         shutil.rmtree(NEW_DIR)
@@ -127,8 +130,7 @@ def save_vars(
     for col in columns:
         var[col] = np.exp(var[col])
     
-    dir = os.path.split(adata.uns['datapath'])[0]
-    NEW_DIR = os.path.join(dir, 'tempdata')
+    NEW_DIR = adata.uns['temp']
 
     s.to_csv(f'{NEW_DIR}/fits.csv')
     u.to_csv(f'{NEW_DIR}/fitu.csv')

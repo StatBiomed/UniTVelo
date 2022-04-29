@@ -1,6 +1,11 @@
 Release History
 ===============
 
+Version 0.1.5
+-------------
+- Fix bug in saving files
+- Add adjustable parameters for penalty in configuration file
+
 Version 0.1.4
 -------------
 - Add penalty on loss function

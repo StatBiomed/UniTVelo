@@ -28,7 +28,7 @@ class Validation():
             self.palette = 'tab20'
 
     def init_data(self, adata):
-        DIR = os.path.join(os.path.split(adata.uns['datapath'])[0], 'tempdata')
+        DIR = adata.uns['temp']
         f = os.listdir(DIR)
         f.sort(key=natural_keys)
 
@@ -170,7 +170,7 @@ class Validation():
         plt.show()
 
     def plot_scv_fit(self, gene_name, adata):
-        DIR = os.path.join(os.path.split(adata.uns['datapath'])[0], 'tempdata')
+        DIR = adata.uns['temp']
         self.mu = pd.read_csv(f'{DIR}/Mu.csv', index_col=0).add_suffix('_u')
         self.ms = pd.read_csv(f'{DIR}/Ms.csv', index_col=0).add_suffix('_s')
 

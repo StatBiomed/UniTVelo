@@ -85,7 +85,7 @@ def run_model(
         else:
             basis = None
 
-        remove_dir(adata.uns['datapath'])
+        remove_dir(adata.uns['datapath'], adata)
         scv.pp.filter_and_normalize(adata, min_shared_counts=20, n_top_genes=config.N_TOP_GENES)
         scv.pp.moments(adata, n_pcs=30, n_neighbors=30)
 
@@ -114,8 +114,7 @@ def run_model(
         df.style.background_gradient(cmap='coolwarm', axis=1)
         print (df)
 
-    adata.write(os.path.join(os.path.split(data_path)[0], 'tempdata/temp.h5ad'), 
-        compression='gzip')
+    adata.write(os.path.join(adata.uns['temp'], 'temp.h5ad'), compression='gzip')
     
     if config.EXAMINE_GENE:
         from .individual_gene import exam_genes

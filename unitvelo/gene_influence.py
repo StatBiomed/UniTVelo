@@ -248,8 +248,6 @@ def influence(adata, n_jobs):
     adata.uns['gene_rank'] = ranking
     adata.uns['gene_score'] = gene_score
 
-    adata.write(
-        os.path.join(os.path.split(adata.uns['datapath'])[0], 'tempdata/temp.h5ad'), 
-        compression='gzip')
+    adata.write(os.path.join(adata.uns['temp'], 'temp.h5ad'), compression='gzip')
 
     return ranking, gene_score

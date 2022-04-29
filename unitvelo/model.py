@@ -146,7 +146,7 @@ class Recover_Paras(Model_Utils):
                 
                 if self.config.REG_LOSS:
                     self.s_r2 = self.s_r2 + \
-                        std(Ms, axis=0) * 0.075 * exp(-square(args[6] - 0.5) / 1)
+                        std(Ms, axis=0) * self.config.REG_TIMES * exp(-square(args[6] - 0.5) / self.config.REG_SCALE)
 
             self.vars = mean(self.s_r2, axis=0) \
                 - square(mean(tf.math.sign(sdiff) * sqrt(self.s_r2), axis=0))

@@ -1,6 +1,10 @@
 Release History
 ===============
 
+Version 0.1.6
+-------------
+- Fix bug for early stopping scenarios
+
 Version 0.1.5
 -------------
 - Fix bug in saving files

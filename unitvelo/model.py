@@ -134,7 +134,7 @@ class Recover_Paras(Model_Utils):
                 - sum(self.s_r2, axis=0) / (2 * self.vars) 
 
         else:
-            if iter <= 10000:
+            if iter <= self.config.MAX_ITER - 2000:
                 self.u_r2 = square(udiff)
                 self.s_r2 = square(sdiff)
                 self.se.append(int(sum(self.u_r2 + self.s_r2).numpy()))
@@ -195,10 +195,22 @@ class Recover_Paras(Model_Utils):
 
             stop_cond = self.get_stop_cond(iter, pre, obj)
 
+            if iter > 2500:
+                self.m_args = self.get_optimal_res(args, self.m_args)
+                self.m_ur2 = self.get_optimal_res(self.u_r2, self.m_ur2)
+                self.m_sr2 = self.get_optimal_res(self.s_r2, self.m_sr2)
+                self.m_ullf = self.get_optimal_res(self.u_log_likeli, self.m_ullf)
+
             if (iter > 5000) & \
                 (iter == self.config.MAX_ITER - 1 or \
                 tf.math.reduce_all(stop_cond) == True or \
                 min(self.se) * 1.1 < self.se[-1]):
+
+                if iter > self.config.MAX_ITER - 2000 & self.config.REG_LOSS:
+                    self.m_args = args
+                    self.m_ur2 = self.u_r2
+                    self.m_sr2 = self.s_r2
+                    self.m_ullf = self.u_log_likeli
 
                 t_cell = self.compute_cell_time(args=self.m_args)
                 _ = self.get_fit_s(self.m_args, t_cell)
@@ -207,12 +219,6 @@ class Recover_Paras(Model_Utils):
 
                 self.post_utils(iter, self.m_args)
                 break
-            
-            if iter > 5000:
-                self.m_args = self.get_optimal_res(args, args)
-                self.m_ur2 = self.get_optimal_res(self.u_r2, self.m_ur2)
-                self.m_sr2 = self.get_optimal_res(self.s_r2, self.s_r2)
-                self.m_ullf = self.get_optimal_res(self.u_log_likeli, self.m_ullf)
 
             args_to_optimize = self.get_opt_args(iter, args)
             gradients = tape.gradient(target=obj, sources=args_to_optimize)
@@ -231,7 +237,7 @@ class Recover_Paras(Model_Utils):
         return self.get_interim_t(t_cell), s_derivative.numpy()
 
     def get_optimal_res(self, current, opt):
-        return current if min(self.se[5000:]) == self.se[-1] else opt
+        return current if min(self.se[2500:]) == self.se[-1] else opt
 
     def post_utils(self, iter, args):
         # Reshape un/spliced variance to (1, ngenes)

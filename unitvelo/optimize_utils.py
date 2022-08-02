@@ -1,6 +1,7 @@
 #%%
 import tensorflow as tf
 import numpy as np
+import logging
 np.random.seed(42)
 
 exp = tf.math.exp
@@ -26,9 +27,9 @@ def col_minmax(matrix, gene_id=None):
 
 def exp_args(adata, K=1):
     if adata.uns['base_function'] == 'Gaussian':
-        columns = ['a0', 'vars', 'varu', 'h0', 'gamma', 'beta']
+        columns = ['a0', 'h0', 'gamma', 'beta']
     else:
-        columns = ['vars', 'varu', 'gamma', 'beta']
+        columns = ['gamma', 'beta']
         columns.extend([f'a{k}' for k in range(K)])
 
     return columns
@@ -66,15 +67,15 @@ class Model_Utils():
         self.K = 1
         self.win_size = 50
         self.config = config
+        self.gene_log = []
+        self.agenes_thres = int(config.AGENES_THRES * config.MAX_ITER)
 
     def init_vars(self):
-        ngenes = len(self.var_names)
+        ngenes = self.Ms.shape[1]
         ones = tf.ones((1, ngenes), dtype=tf.float32)
 
         self.gamma = tf.Variable(ones * 0, name='log_gamma')
         self.beta = tf.Variable(ones * 0, name='log_beta')
-        self.vars = tf.Variable(ones * 1, name='vars')
-        self.varu = tf.Variable(ones * 1, name='varu')
         self.intercept = tf.Variable(ones * 0, name='intercept')
 
         if self.mode == 'Gaussian':
@@ -90,7 +91,14 @@ class Model_Utils():
                             tf.reshape(init_gamma, (1, self.adata.n_vars))), 
                             name='log_gamma')
 
-            if self.config.OFFSET_GENES:
+            for id in np.where(init_gamma <= 0)[0]:
+                logging.info(f'name: {self.adata.var.index[id]}, gamma: {init_gamma[id]}')
+
+            self.gamma = tf.Variable(
+                tf.where(tf.math.is_finite(self.gamma), self.gamma, 0), 
+                name='log_gamma')
+
+            if self.config.VGENES == 'offset':
                 init_inter = self.adata.var['velocity_inter'].values
                 self.intercept = \
                     tf.Variable(
@@ -107,7 +115,7 @@ class Model_Utils():
             self.offset = tf.Variable(tf.zeros((self.K, ngenes)), name='offset')
 
     def init_pars(self):
-        self.default_pars_names = ['gamma', 'beta', 'vars', 'varu']
+        self.default_pars_names = ['gamma', 'beta']
         self.default_pars_names += [f'offset{k}' for k in range(self.K)]
         self.default_pars_names += [f'a{k}' for k in range(self.K)]
         self.default_pars_names += [f't{k}' for k in range(self.K)]
@@ -145,20 +153,20 @@ class Model_Utils():
 
     def get_fit_s(self, args, t_cell):
         if self.mode == 'Gaussian':
-            self.fit_s = exp(args[7]) * \
-                exp(-exp(args[5]) * square(t_cell - args[6])) + \
-                args[4]
+            self.fit_s = exp(args[5]) * \
+                exp(-exp(args[3]) * square(t_cell - args[4])) + \
+                args[2]
         
         if self.mode == 'Mixture':
-            fit_s = args[7][0, :] * \
-                exp(-exp(args[5][0, :]) * square(t_cell - args[6][0, :])) + \
-                args[4][0, :]
+            fit_s = args[5][0, :] * \
+                exp(-exp(args[3][0, :]) * square(t_cell - args[4][0, :])) + \
+                args[2][0, :]
             fit_s = tf.expand_dims(fit_s, axis=0)
 
             for k in range(1, self.K):
-                temp = args[7][k, :] * \
-                    exp(-exp(args[5][k, :]) * square(t_cell - args[6][k, :])) + \
-                    args[4][k, :]
+                temp = args[5][k, :] * \
+                    exp(-exp(args[3][k, :]) * square(t_cell - args[4][k, :])) + \
+                    args[2][k, :]
                 temp = tf.expand_dims(temp, axis=0)
                 fit_s = tf.concat([fit_s, temp], axis=0)
 
@@ -169,17 +177,17 @@ class Model_Utils():
     
     def get_s_deri(self, args, t_cell):
         if self.mode == 'Gaussian':
-            self.s_deri = (self.fit_s - args[4]) * \
-                (-exp(args[5]) * 2 * (t_cell - args[6]))
+            self.s_deri = (self.fit_s - args[2]) * \
+                (-exp(args[3]) * 2 * (t_cell - args[4]))
         
         if self.mode == 'Mixture':
-            s_deri = (self.ori_s[0, :, :] - args[4][0, :]) * \
-                (-exp(args[5][0, :]) * 2 * (t_cell - args[6][0, :]))
+            s_deri = (self.ori_s[0, :, :] - args[2][0, :]) * \
+                (-exp(args[3][0, :]) * 2 * (t_cell - args[4][0, :]))
             s_deri = tf.expand_dims(s_deri, axis=0)
 
             for k in range(1, self.K):
-                temp_deri = (self.ori_s[k, :, :] - args[4][k, :]) * \
-                    (-exp(args[5][k, :]) * 2 * (t_cell - args[6][k, :]))
+                temp_deri = (self.ori_s[k, :, :] - args[2][k, :]) * \
+                    (-exp(args[3][k, :]) * 2 * (t_cell - args[4][k, :]))
                 temp_deri = tf.expand_dims(temp_deri, axis=0)
                 s_deri = tf.concat([s_deri, temp_deri], axis=0)
             
@@ -188,7 +196,7 @@ class Model_Utils():
         return self.s_deri
 
     def get_fit_u(self, args):
-        return (self.s_deri + exp(args[0]) * self.fit_s) / exp(args[1]) + args[8]
+        return (self.s_deri + exp(args[0]) * self.fit_s) / exp(args[1]) + args[6]
     
     def get_s_u(self, args, t_cell):
         s = self.get_fit_s(args, t_cell)
@@ -226,49 +234,39 @@ class Model_Utils():
         if self.config.DENSITY == 'Raw':
             return tf.cast(mean(dis, axis=1), tf.float32)
 
-    def match_time(self, Ms, Mu, s_predict, u_predict, x):
+    def match_time(self, Ms, Mu, s_predict, u_predict, x, iter):
         val = x[1, :] - x[0, :]
-        batch = 1
         cell_time = np.zeros((Ms.shape[0], Ms.shape[2]))
 
-        for index in range(int(np.ceil(Ms.shape[2] / batch))):
-            begin, end = batch * index, batch * (index + 1)
-            sobs = Ms[:, :, begin:end] # n * 1 * batch
-            uobs = Mu[:, :, begin:end]
-            spre = s_predict[:, :, begin:end] # 1 * 3000 * batch
-            upre = u_predict[:, :, begin:end]
+        if (self.config.AGENES_R2 < 1) & (iter > self.agenes_thres):
+            self.index_list = np.squeeze(tf.where(self.total_genes))
+        else:
+            self.index_list = np.squeeze(tf.where(self.idx))
 
-            left = 0
-            if False:
-                if tf.where(upre < 0).shape[0] > 0:
-                    cutoff = tf.where(upre < 0)[0][1]
-                    
-                    if cutoff > 0:
-                        upre = upre[:, :cutoff, :]
-                        spre = spre[:, :cutoff, :]
+        for index in range(Ms.shape[2]):
+            if index in self.index_list:
+                sobs = Ms[:, :, index:index + 1] # n * 1 * 1
+                uobs = Mu[:, :, index:index + 1]
+                spre = s_predict[:, :, index:index + 1] # 1 * 3000 * 1
+                upre = u_predict[:, :, index:index + 1]
 
-                    if cutoff == 0:
-                        left = tf.where(upre >= 0)[0][1]
-                        right = tf.where(upre >= 0)[-1][1]
-                        upre = upre[:, left:right, :]
-                        spre = spre[:, left:right, :]
-
-            u_r2 = square(uobs - upre) # n * 3000 * batch
-            s_r2 = square(sobs - spre)
-            euclidean = sqrt(u_r2 + s_r2)
-            assign_loc = tf.math.argmin(euclidean, axis=1).numpy() # n * batch
-            
-            if self.config.REORDER_CELL == 'Soft_Reorder':
-                cell_time[:, begin:end] = \
-                    col_minmax(self.reorder(assign_loc), self.adata.var.index[index])
-            if self.config.REORDER_CELL == 'Soft':
-                cell_time[:, begin:end] = \
-                    col_minmax(assign_loc, self.adata.var.index[index])
-            if self.config.REORDER_CELL == 'Hard':
-                cell_time[:, begin:end] = x[left, begin:end] + val[begin:end] * assign_loc
+                u_r2 = square(uobs - upre) # n * 3000 * 1
+                s_r2 = square(sobs - spre)
+                euclidean = sqrt(u_r2 + s_r2)
+                assign_loc = tf.math.argmin(euclidean, axis=1).numpy() # n * 1
+                
+                if self.config.REORDER_CELL == 'Soft_Reorder':
+                    cell_time[:, index:index + 1] = \
+                        col_minmax(self.reorder(assign_loc), self.adata.var.index[index])
+                if self.config.REORDER_CELL == 'Soft':
+                    cell_time[:, index:index + 1] = \
+                        col_minmax(assign_loc, self.adata.var.index[index])
+                if self.config.REORDER_CELL == 'Hard':
+                    cell_time[:, index:index + 1] = \
+                        x[0, index:index + 1] + val[index:index + 1] * assign_loc
 
         if self.config.AGGREGATE_T:
-            return self.max_density(cell_time) #! sampling?
+            return self.max_density(cell_time[:, self.index_list]) #! sampling?
         else:
             return cell_time
 
@@ -315,31 +313,49 @@ class Model_Utils():
         
         if self.config.FIT_OPTION == '1':
             if iter < self.config.MAX_ITER / 2:
-                args_to_optimize = [args[4], args[5], args[6], args[7]] \
-                    if remain < 200 else [args[0], args[1], args[8]]
+                args_to_optimize = [args[2], args[3], args[4], args[5]] \
+                    if remain < 200 else [args[0], args[1], args[6]]
 
             else:
                 args_to_optimize = [args[0], args[1], 
-                                    args[4], args[5],
-                                    args[6], args[7], args[8]]
+                                    args[2], args[3],
+                                    args[4], args[5], args[6]]
         
         if self.config.FIT_OPTION == '2':
             if iter < self.config.MAX_ITER / 2:
-                args_to_optimize = [args[5], args[7]] \
+                args_to_optimize = [args[3], args[5]] \
                     if remain < 200 else [args[0], args[1]]
                     
             else:
-                args_to_optimize = [args[0], args[1], args[5], args[7]]
+                args_to_optimize = [args[0], args[1], args[3], args[5]]
         
         return args_to_optimize
     
+    def get_log(self, loss, amplify=False, iter=None):
+        self.finite = tf.math.is_finite(loss) # location of weird genes out of 2000
+        glog = self.adata.var.iloc[np.squeeze(tf.where(~self.finite))].index.values 
+        
+        for gene in glog:
+            if gene not in self.gene_log:
+                logging.info(f'{gene}, iter {iter}')
+                self.gene_log.append(gene)
+            
+            if amplify:
+                if self.adata.var.at[gene, 'amplify_genes'] == True:
+                    logging.info(f'{gene}, iter {iter}, amplify')
+                    self.adata.var.at[gene, 'amplify_genes'] = False
+        
+        loss = tf.where(self.finite, loss, 0)
+        return loss
+
     def get_loss(self, iter, s_r2, u_r2):
         if iter < self.config.MAX_ITER / 2:
             remain = iter % 400
             loss = s_r2 if remain < 200 else u_r2
         else:
             loss = s_r2 + u_r2 
-        
+
+        loss = self.get_log(loss, amplify=False, iter=iter)
         return loss
     
     def get_stop_cond(self, iter, pre, obj):
@@ -354,17 +370,19 @@ class Model_Utils():
 
         return tf.math.logical_and(stop_s, stop_u)
 
-    def get_interim_t(self, t_cell):
+    def get_interim_t(self, t_cell, idx):
         if self.config.AGGREGATE_T:
             return t_cell
         
         else:
+            #? modify this later for independent mode
             t_interim = np.zeros(t_cell.shape)
 
             for i in range(t_cell.shape[1]):
-                temp = np.reshape(t_cell[:, i], (-1, 1))
-                t_interim[:, i] = \
-                    np.squeeze(col_minmax(temp, self.adata.var.index[i]))
+                if idx[i]:
+                    temp = np.reshape(t_cell[:, i], (-1, 1))
+                    t_interim[:, i] = \
+                        np.squeeze(col_minmax(temp, self.adata.var.index[i]))
 
             t_interim = self.max_density(t_interim)
             t_interim = tf.reshape(t_interim, (-1, 1))

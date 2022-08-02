@@ -95,7 +95,6 @@ metrics = {}
 metrics = utv.evaluate(adata, cluster_edges, label, 'velocity')
 
 # Latent time estimation
-scv.tl.latent_time(adata, min_likelihood=None)
 scv.pl.scatter(adata, color='latent_time', color_map='gnuplot', size=20)
 
 # Phase portraits for individual genes (experimental)

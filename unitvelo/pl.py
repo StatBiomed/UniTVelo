@@ -73,7 +73,9 @@ def plot_range(
     show_temporal=False,
     show_positive=False,
     t_left=None,
-    t_right=None
+    t_right=None,
+    palette='tab20',
+    ncols=1
 ):
     """
     Plotting function of phase portraits of individual genes.
@@ -99,9 +101,8 @@ def plot_range(
         raise ValueError('Please set attribute `config_file`')
 
     if time_metric == 'latent_time':
-        scv.tl.latent_time(adata, min_likelihood=None)
-        from .utils import min_max
-        adata.obs['latent_time'] = min_max(adata.obs['latent_time'].values)
+        if 'latent_time' not in adata.obs.columns:
+            scv.tl.latent_time(adata, min_likelihood=None)
 
     if show_details:
         from .individual_gene import exam_genes        
@@ -114,6 +115,10 @@ def plot_range(
         f.concat_data()
         f.vars_trends(gene_name, adata)
 
+        scaling = adata.var.loc[gene_name]['scaling']
+        f.para['beta'] *= scaling
+        f.para['intercept'] /= scaling
+
         columns = exp_args(adata)
         for col in columns:
             f.para[col] = np.log(f.para[col])
@@ -124,38 +129,40 @@ def plot_range(
         validate = Model_Utils(config=config_file)
         spre, upre = f.func(validate, validate.init_time(boundary, (3000, 1)))
         sone, uone = f.func(validate, validate.init_time((0, 1), (3000, 1)))
+        upre, uone = upre * scaling, uone * scaling
 
         fig, ax = plt.subplots()
         if not show_ax:
             ax.axis("off")
 
         g = sns.scatterplot(np.squeeze(adata[:, gene_name].layers['Ms']), 
-                            np.squeeze(adata[:, gene_name].layers['Mu_scale']), 
+                            np.squeeze(adata[:, gene_name].layers['Mu']), 
                             s=20, hue=adata.obs[adata.uns['label']], 
-                            palette=f.palette)
+                            palette=palette)
                             
         plt.plot(np.squeeze(spre), np.squeeze(upre), color='lightgrey', linewidth=2)
         plt.plot(np.squeeze(sone), np.squeeze(uone), color='black', linewidth=2)
         plt.xlim([
-            -0.05 if adata[:, gene_name].layers['Ms'].min() < 1
+            -0.005 if adata[:, gene_name].layers['Ms'].min() < 1
                 else adata[:, gene_name].layers['Ms'].min() * 0.95, 
             adata[:, gene_name].layers['Ms'].max() * 1.05])
         plt.ylim([
-            -0.05 if adata[:, gene_name].layers['Mu_scale'].min() < 1
-                else adata[:, gene_name].layers['Mu_scale'].min() * 0.95, 
-            adata[:, gene_name].layers['Mu_scale'].max() * 1.05])
+            -0.005 if adata[:, gene_name].layers['Mu'].min() < 1
+                else adata[:, gene_name].layers['Mu'].min() * 0.95, 
+            adata[:, gene_name].layers['Mu'].max() * 1.05])
 
         if not show_legend:
             g.get_legend().remove()
 
         plt.xlabel('Spliced')
         plt.ylabel('Unspliced')
-        # plt.title(gene_name, fontsize=12)
+        plt.title(gene_name, fontsize=12)
         plt.show()
 
         if save_fig:
             plt.savefig(f'./figures/GM_{gene_name}.png', dpi=300, bbox_inches='tight')
         
+        #! solving the starting and ending timepoint of phase portraits afterwards
         if show_temporal:
             f.vars_trends(gene_name, adata)
             fit_left = f.fs[f'{gene_name}_fits'][np.argwhere(f.lt == 0)[0][0]]
@@ -169,7 +176,9 @@ def plot_range(
                 print (t_left, t_right, f.para.t0)
 
                 if f.para.t0 > 0 and f.para.t0 <= 0.5 and t_left == None:
-                        t_left = -np.sqrt(np.log((fit_left - f.para.offset0) / f.para.h0) / (-f.para.a0)) + f.para.t0
+                        t_left = \
+                            -np.sqrt(np.log((fit_left - f.para.offset0) / f.para.h0) / (-f.para.a0)) \
+                            + f.para.t0
 
                 t_left = 0 if np.isnan(t_left) else t_left
                 t_right = 1 if np.isnan(t_right) else t_right
@@ -201,18 +210,20 @@ def plot_range(
             g1 = sns.scatterplot(np.squeeze(adata.obs[time_metric].values), 
                                 np.squeeze(adata[:, gene_name].layers['Ms']), 
                                 s=20, hue=adata.obs[adata.uns['label']], 
-                                palette=f.palette, ax=axes[0])
+                                palette=palette, ax=axes[0])
             sns.lineplot(t_re, s, color='black', linewidth=2, ax=axes[0])
 
+            axes[0].set_xlabel('Inferred Cell Time')
+            axes[0].set_ylabel('Spliced')
+
             g2 = sns.scatterplot(np.squeeze(adata.obs[time_metric].values), 
-                                np.squeeze(adata[:, gene_name].layers['Mu_scale']), 
+                                np.squeeze(adata[:, gene_name].layers['Mu']), 
                                 s=20, hue=adata.obs[adata.uns['label']], 
-                                palette=f.palette, ax=axes[1])
+                                palette=palette, ax=axes[1])
             sns.lineplot(t_re, u, color='black', linewidth=2, ax=axes[1])
 
-            # if time_metric == 'latent_time':
-            #     axes[0].xlim([np.round(t_left, 1), np.round(t_right, 1)])
-            #     axes[1].xlim([np.round(t_left, 1), np.round(t_right, 1)])
+            axes[1].set_xlabel('Inferred Cell Time')
+            axes[1].set_ylabel('Unspliced')
 
             if not show_legend:
                 g1.get_legend().remove()
@@ -223,7 +234,7 @@ def plot_range(
                 plt.savefig(f'./figures/GM_{gene_name}_temporal.png', dpi=300, bbox_inches='tight')
 
 def plot_phase_portrait(adata, args, sobs, uobs, spre, upre):
-    if adata.uns['examine_genes'] != False:
+    if 'examine_genes' in adata.uns.keys():
         display.clear_output(wait=True)
         examine = Validation(adata)
         fig, axes = plt.subplots(1, 1, figsize=(6, 4))
@@ -242,9 +253,9 @@ def plot_phase_portrait(adata, args, sobs, uobs, spre, upre):
         pass
 
 def plot_cell_time(adata):
-    if adata.uns['examine_genes'] != False:
+    if 'examine_genes' in adata.uns.keys():
         raise ValueError(
-            f'self.EXAMINE_GENE in configuration file should be False.\n'
+            f'self.VGENES in configuration file should not be a specified gene name.\n'
             f'Please re-run the model use alternative setting.'
         )
     
@@ -254,18 +265,22 @@ def plot_cell_time(adata):
             size=25, title='Assigned cell time', dpi=300
         )
 
-def plot_loss(iter, loss):
+def plot_loss(iter, loss, thres=None):
     fig, axes = plt.subplots(1, 2, figsize=(12, 4))
-
     x = range(iter + 1)
-    subiter, subloss = x[800:], loss[800:]
+
+    subiter, subloss = x[800:thres - 1], loss[800:thres - 1]
     axes[0].plot(subiter, subloss)
-    axes[0].set_title('Iter # from 800')
+    axes[0].set_title('Iter # from 800 to cutoff')
     axes[0].set_ylabel('Euclidean Loss')
 
-    subiter, subloss = x[int(iter / 2):], loss[int(iter / 2):]
+    # subiter, subloss = x[int(iter / 2):], loss[int(iter / 2):]
+    # axes[1].plot(subiter, subloss)
+    # axes[1].set_title('Iter # from 1/2 of maximum')
+
+    subiter, subloss = x[int(thres * 1.01):], loss[int(thres * 1.01):]
     axes[1].plot(subiter, subloss)
-    axes[1].set_title('Iter # from 1/2 of maximum')
+    axes[1].set_title('Iter # from cutoff to terminated state')
 
     plt.show()
     plt.close()
@@ -314,5 +329,14 @@ def plot_compare_llf(adata):
     sns.distplot(ratio, ax=axes, bins=200, kde=True)
     axes.set_title('Likelihood Ratio')
     
+    plt.show()
+    plt.close()
+
+def plot_reverse_tran_scatter(adata):
+    sns.scatterplot(x='rbf_r2', y='qua_r2', 
+        data=adata.var.loc[adata.var['velocity_genes'] == True])
+    plt.axline((0, 0), (0.5, 0.5), color='r')
+        
+    plt.title(f'$R^2$ comparison of RBF and Quadratic model')
     plt.show()
     plt.close()

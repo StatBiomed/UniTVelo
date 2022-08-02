@@ -16,12 +16,12 @@ def natural_keys(text):
 class Validation():
     def __init__(self, adata, time_metric='latent_time') -> None:
         self.adata = adata
-
-        if 'latent_time' not in self.adata.obs.columns:
-            import scvelo as scv
-            scv.tl.latent_time(self.adata, min_likelihood=None)         
-
         self.time_metric = time_metric
+
+        if 'latent_time' not in adata.obs.columns:
+            import scvelo as scv
+            scv.tl.latent_time(adata, min_likelihood=None)         
+
         if len(set(adata.obs[adata.uns['label']])) > 20:
             self.palette = 'viridis'
         else:
@@ -133,6 +133,7 @@ class Validation():
         return s, u
 
     def plot_range(self, gene_name, adata, ctype=None):
+        #! solving the scaling of unspliced problem afterwards
         from .optimize_utils import exp_args
         from .optimize_utils import Model_Utils
         validate = Model_Utils(config=adata.uns['config'])

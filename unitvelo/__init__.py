@@ -1,7 +1,7 @@
 #%%
 import os
 from time import gmtime, strftime
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '1'
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 try:
     from setuptools_scm import get_version
@@ -23,3 +23,4 @@ from .main import run_model
 from .config import Configuration
 from .eval_utils import evaluate
 from .gene_influence import influence
+from .utils import choose_mode, subset_adata

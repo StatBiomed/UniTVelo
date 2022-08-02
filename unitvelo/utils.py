@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import os
 np.random.seed(42)
+import logging
 
 def get_cgene_list():
     s_genes_list = \
@@ -22,19 +23,19 @@ def get_cgene_list():
 
     return s_genes_list, g2m_genes_list
 
-def new_adata_col(adata, idx, var_names, values):
+def new_adata_col(adata, var_names, values):
     for i, name in enumerate(var_names):
-        adata.var[name] = np.zeros(adata.n_vars) * np.nan
-        adata.var[name][idx] = values[i]
+        # adata.var[name] = np.zeros(adata.n_vars) * np.nan
+        adata.var[name] = values[i]
 
 def get_cycle_gene(adata):
     from .utils import get_cgene_list
     s_genes_list, g2m_genes_list = get_cgene_list()
 
-    var = adata.var.loc[adata.var['velocity_genes'] == True]
+    # var = adata.var.loc[adata.var['velocity_genes'] == True]
     phase_s, phase_g2 = [], []
 
-    for gene in var.index:
+    for gene in adata.var.index:
         if gene in s_genes_list:
             phase_s.append(gene)
         if gene in g2m_genes_list:
@@ -43,20 +44,95 @@ def get_cycle_gene(adata):
     return phase_s, phase_g2
 
 def col_corrcoef(raw, fit):
+    from .utils import min_max
+
     res = []
     for col in range(raw.shape[1]):
         corr = np.corrcoef(min_max(raw[:, col]), min_max(fit[:, col]))[0][1]
         res.append(corr)
+        
     return np.array(res)
 
 def col_spearman(raw, fit):
     from scipy.stats import spearmanr
+    from .utils import min_max
 
     res = []
     for col in range(raw.shape[1]):
         results, _ = spearmanr(min_max(raw[:, col]), min_max(fit[:, col]))
         res.append(results)
+
     return np.array(res)
+
+def col_spearman_unorm(raw, fit):
+    from scipy.stats import spearmanr
+
+    res = []
+    for col in range(raw.shape[1]):
+        results, _ = spearmanr(raw[:, col], fit[:, col])
+        res.append(results)
+
+    return np.array(res)
+
+def gene_level_spearman(adata, iroot=None, n_top_genes=2000):
+    """Spearman correlation between the expression profiles fitness 
+        of the top-down (scVelo Dynamical mode) or 
+        bottom-up strategies (UniTVelo Independent mode)
+        Could serve as a systematic comparison (e.g. the entire transcriptome) between two methods    
+    """
+    
+    import scvelo as scv
+    import scanpy as sc
+    import numpy as np
+    import pandas as pd
+    from .utils import col_spearman
+
+    print ('---> Running scVelo dynamical mode')
+    scvdata = scv.read(adata.uns['datapath'])
+    scv.pp.filter_and_normalize(scvdata, min_shared_counts=20, n_top_genes=n_top_genes)
+    scv.pp.moments(scvdata, n_pcs=30, n_neighbors=30)
+    scv.tl.recover_dynamics(scvdata, n_jobs=20)
+    scv.tl.velocity(scvdata, mode='dynamical')
+
+    print ('---> Generating reference with diffusion pseudotime')
+    sc.tl.diffmap(adata)
+    adata.uns['iroot'] = np.flatnonzero(adata.obs[adata.uns['label']] == iroot)[0]
+    sc.tl.dpt(adata)
+    # scv.pl.scatter(adata, color='dpt_pseudotime', cmap='gnuplot', dpi=100, size=20)
+
+    print ('---> Caculating spearman correlation with reference')
+    if 'organoids' in adata.uns['datapath']:
+        scvdata.var.index = scvdata.var['gene'].values
+
+    index = adata.var.loc[adata.var['velocity_genes'] == True].index.intersection(scvdata.var.loc[scvdata.var['velocity_genes'] == True].index)
+    tadata = adata[:, index].layers['fit_t']
+    tscv = scvdata[:, index].layers['fit_t']
+
+    gt = adata.obs['dpt_pseudotime'].values
+    gt = np.broadcast_to(np.reshape(gt, (-1, 1)), tadata.shape)
+    resadata = col_spearman(gt, tadata)
+    resscv = col_spearman(gt, tscv)
+
+    corr = pd.DataFrame(index=index, columns=['UniTVelo', 'scVelo'])
+    corr['UniTVelo'] = np.reshape(resadata, (-1, 1))
+    corr['scVelo'] = np.reshape(resscv, (-1, 1))
+
+    return corr['UniTVelo'].values, corr['scVelo'].values, corr
+
+def gene_level_comparison(corr):
+    import seaborn as sns
+    import matplotlib.pyplot as plt
+
+    sns.boxplot(data=corr)
+    plt.title('Comparison of gene-specific time', fontsize=12)
+    plt.ylabel('Spearman Correlation', fontsize=12)
+    plt.show()
+    plt.close()
+
+    sns.scatterplot(x='UniTVelo', y='scVelo', data=corr)
+    plt.axline((0, 0), (0.5, 0.5), color='r')
+    plt.show()
+    plt.close()
 
 def col_mse(raw, fit):
     from sklearn.metrics import mean_squared_error
@@ -94,32 +170,33 @@ def save_vars(
     args, 
     fits, 
     fitu, 
-    K=1
+    K=1,
+    scaling=1
 ):
     from .optimize_utils import exp_args
 
     s = pd.DataFrame(data=fits, index=adata.obs.index, columns=adata.var.index)
     u = pd.DataFrame(data=fitu, index=adata.obs.index, columns=adata.var.index)
     ms = pd.DataFrame(data=adata.layers['Ms'], index=adata.obs.index, columns=adata.var.index)
-    mu = pd.DataFrame(data=adata.layers['Mu_scale'], index=adata.obs.index, columns=adata.var.index)
+    mu = pd.DataFrame(data=adata.layers['Mu'], index=adata.obs.index, columns=adata.var.index)
     s['label'] = adata.obs[adata.uns['label']].values
 
     if adata.var.index[0].startswith('ENSMUSG'):
         adata.var.index = adata.var['gene']
         adata.var.index.name = 'index' 
 
-    var = pd.DataFrame(data=np.zeros((adata.shape[1],)), index=adata.var.index)
+    var = pd.DataFrame(data=np.zeros((adata.shape[1], )), index=adata.var.index)
     del var[0]
 
     pars = []
     for i in range(len(args)):
         if args[i].shape[0] > 1:
             for k in range(K):
-                par = np.zeros(adata.n_vars) * np.nan
+                # par = np.zeros(adata.n_vars) * np.nan
                 par = args[i][k, :].numpy()
                 pars.append(par)
         else:
-            par = np.zeros(adata.n_vars) * np.nan
+            # par = np.zeros(adata.n_vars) * np.nan
             par = args[i].numpy()
             pars.append(par)
     
@@ -129,6 +206,9 @@ def save_vars(
     columns = exp_args(adata, K=K)
     for col in columns:
         var[col] = np.exp(var[col])
+    
+    var['beta'] /= scaling
+    var['intercept'] *= scaling
     
     NEW_DIR = adata.uns['temp']
 
@@ -186,10 +266,137 @@ def OLS(x, y):
 def get_model_para(adata):
     var = adata.var.loc[adata.var['velocity_genes'] == True]
     var = var[[
-        'fit_loss', 'fit_bic', 'fit_llf',
-        'fit_gamma', 'fit_beta', 'fit_vars', 'fit_varu', 
+        'scaling', 'velocity_genes', 'fit_vars',
+        'fit_varu', 'fit_gamma', 'fit_beta', 'fit_offset0', 
         'fit_a0', 'fit_t0', 'fit_h0', 
-        'li_coef', 'li_loss', 'li_r2', 
-        'li_llf', 'li_bic'
+        'fit_intercept', 'fit_loss', 'fit_bic', 
+        'fit_llf', 'fit_sr2', 'fit_ur2'
     ]]
+
+    if 're_transit' in adata.var.columns:
+        var[0].extend(['qua_r2', 'rbf_r2', 're_transit'])
+
     return var
+
+def reverse_transient(adata, time_metric='latent_time'):
+    from scipy.optimize import curve_fit
+    import numpy as np
+    from tqdm.notebook import tqdm
+
+    adata.var['re_transit'] = False
+    adata.var['qua_r2'] = -1.
+    adata.var['rbf_r2'] = -1.
+    sigma_max = np.max(adata.var.loc[adata.var['velocity_genes'] == True]['fit_a0'])
+    celltime = adata.obs[time_metric].values
+    
+    def quadratic(x, a, b, c):
+        return a * (x ** 2) + b * x + c
+
+    def rbf(x, h, sigma, tau):
+        return h * np.exp(-sigma * (x - tau) * (x - tau))
+
+    for index, row in tqdm(adata.var.iterrows()):
+        if row['velocity_genes']:
+            spliced = np.squeeze(np.array(adata[:, index].layers['Ms']))
+            popt, _ = curve_fit(quadratic, celltime, spliced)
+
+            fitted = quadratic(celltime, popt[0], popt[1], popt[2])
+            ss_res = np.sum((spliced - fitted) ** 2)
+            ss_tot = np.sum((spliced - np.mean(spliced)) ** 2)
+            r2 = 1 - (ss_res / ss_tot)
+            adata.var.loc[index, 'qua_r2'] = r2
+
+            try:
+                popt_rbf, _ = curve_fit(rbf, celltime, spliced, 
+                    maxfev=10000, 
+                    bounds=([1e-2, 1e-3, -np.inf], 
+                            [np.max(spliced), sigma_max, +np.inf])
+                )
+
+                fitted_rbf = rbf(celltime, popt_rbf[0], popt_rbf[1], popt_rbf[2])
+                ss_res_rbf = np.sum((spliced - fitted_rbf) ** 2)
+                ss_tot_rbf = np.sum((spliced - np.mean(spliced)) ** 2)
+                r2_rbf= 1 - (ss_res_rbf / ss_tot_rbf)            
+                adata.var.loc[index, 'rbf_r2'] = r2_rbf
+            
+            except:
+                r2_rbf = 0
+                adata.var.loc[index, 'rbf_r2'] = r2_rbf
+
+            if r2 - r2_rbf > 0.075:
+                adata.var.loc[index, 're_transit'] = True
+    
+    from .pl import plot_reverse_tran_scatter
+    plot_reverse_tran_scatter(adata)
+
+    re_tran_num = adata.var.loc[adata.var['re_transit'] == True].shape[0]
+    re_tran_perc = re_tran_num / adata.var.loc[adata.var['velocity_genes'] == True].shape[0]
+    logging.info(f'# of genes which are identified as reverse transient {re_tran_num}')
+    logging.info(f'percentage of genes which are identified as reverse transient {re_tran_perc}')
+    
+    return adata
+
+def choose_mode(adata, label=None):
+    print ('This function works as a reference only.')
+    print ('For less certain scenario, we also suggest user to try both.')
+    print ('---> Checking cell cycle scores...')
+
+    from .utils import get_cgene_list
+    import scvelo as scv
+    scv.pp.filter_and_normalize(adata, min_shared_counts=20, n_top_genes=2000)
+
+    s, g2m = get_cgene_list()
+    num_s = len(adata.var.index.intersection(s))
+    num_g2m = len(adata.var.index.intersection(g2m))
+
+    print (f'---> Number of S genes {num_s}/{len(s)}')
+    print (f'---> Number of G2M genes {num_g2m}/{len(g2m)}')
+
+    if (num_s / len(s) > 0.5) or (num_g2m / len(g2m) > 0.5):
+        print ('Independent mode is recommended, consider setting config.FIT_OPTION = 2')
+
+    else:
+        print ('# of cycle genes failed to pass thresholds')
+        print ('---> Checking sparse cell types...')
+        scv.pp.moments(adata, n_pcs=30, n_neighbors=30)
+        adata.obs['cid'] = list(range(adata.shape[0]))
+
+        try:
+            neighbors = adata.uns['neighbors']['indices']
+        except:
+            scv.pp.neighbors(adata, n_pcs=30, n_neighbors=30)
+            neighbors = adata.uns['neighbors']['indices']
+
+        ctype_perc = []
+        ctype = list(set(adata.obs[label].values))
+
+        for type in ctype:
+            temp = adata[adata.obs.loc[adata.obs[label] == type].index, :]
+            temp_id = temp.obs['cid'].values
+            temp_nei = neighbors[temp_id, 1:].flatten()
+
+            temp_nei = [True if nei in temp_id else False for nei in temp_nei]
+            ctype_perc.append(np.sum(temp_nei) / len(temp_nei))
+        
+        if np.sum(np.array(ctype_perc) > 0.95) >= 3:
+            print ('More than two sparse cell types have been detected')
+            print ('Independent mode is recommended, consider setting config.FIT_OPTION = 2')
+        else:
+            print ('Unified-time mode is recommended, consider setting config.FIT_OPTION = 1')
+
+def subset_adata(adata, label=None, proportion=0.5):
+    adata.obs['cid'] = list(range(adata.shape[0]))
+    ctype = list(set(adata.obs[label].values))
+
+    subset = []
+
+    for type in ctype:
+        temp = adata[adata.obs.loc[adata.obs[label] == type].index, :]
+        temp_id = temp.obs['cid'].values
+
+        if len(temp_id) < 50:
+            subset.extend(list(temp_id))
+        else:
+            subset.extend(list(np.random.choice(temp_id, size=int(temp.shape[0] * proportion), replace=False)))
+        
+    return adata[np.array(subset), :]

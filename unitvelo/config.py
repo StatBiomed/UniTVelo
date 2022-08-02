@@ -18,7 +18,7 @@ class Configuration(object):
         # Deterministic Curve Linear
         self.GENERAL = 'Curve'
 
-        # (str) embedding format of adata, e.g. t_sne, u_map, 
+        # (str) embedding format of adata, e.g. pca, tsne, umap, 
         # if None (default), algorithm will choose one automatically
         self.BASIS = None
 
@@ -26,18 +26,26 @@ class Configuration(object):
         # consider decreasing to 1500 when # of cells > 10k
         self.N_TOP_GENES = 2000
 
+        # (str) selection creteria for velocity genes used in RNA velocity construction, default basic
+        # raws, all highly variable genes specified by self.N_TOP_GENES will be used
+        # offset, linear regression $R^2$ and coefficient with offset, will override self.R2_ADJUST
+        # basic, linear regression $R^2$ and coefficient without offset
+        # [single gene name], fit this designated gene alone, for model validation purpose only
+        # [list of gene names], manually provide a list of genes as velocity genes in string, might improve performance, see scNT
+        self.VGENES = 'basic'
+
         # (bool) linear regression $R^2$ on extreme quantile (default) or full data (adjusted)
+        # valid when self.VGENES = 'basic'
         self.R2_ADJUST = True
 
-        # (bool) linear regression $R^2$ with offset, default False
-        # if True, would override self.R2_ADJUST
-        self.OFFSET_GENES = False
+        # (float) threshold of R2 at later stage of the optimization proces
+        # to capture the dynamics of more genes beside initially selected velocity genes
+        # Note: self.AGENES_R2 = 1 will switch to origianl mode with no amplification stage
+        self.AGENES_R2 = 0.35
+        self.AGENES_THRES = 0.61
 
         # (bool, experimental) exclude cell that have 0 expression in either un/spliced when contributing to loss function
         self.FILTER_CELLS = False
-
-        # (bool) 
-        self.EXAMINE_GENE = False
 
         # (bool, experimental) cell time restricted to (0, 1) if False, default False
         self.RESCALE_TIME = False
@@ -45,15 +53,20 @@ class Configuration(object):
         # (bool) rescaled Mu/Ms as input based on variance, default True 
         self.RESCALE_DATA = True
 
-        # (str) name root cell cluster 
-        # if specified, use diffusion map based time as initialization, default None
-        # would override self.NUM_REPEAT and have improved performance
+        # (str) criteria for cell latent time initialization, default None
+        # None, initialized based on the exact order of input expression matrix
+        # gcount, initialized based on gene counts (https://www.science.org/doi/abs/10.1126/science.aax0249)
+        # [cluster name], use diffusion map based time as initialization
         self.IROOT = None
 
-        # (int, experimental) number of random initializations of time points, default 1
+        # (int) number of random initializations of time points, default 1
         # in rare cases, velocity field generated might be reversed, possibly because stably and monotonically changed genes
         # change this parameter to 2 might do the trick
-        self.NUM_REPEAT = 1
+        self.NUM_REP = 1
+        # when self.NUM_REP = 2, the following parameter will determine how the second time will be initialized 
+        # re_pre, reverse the inferred cell time of first run
+        # re_init, reverse the initialization time of first run
+        self.NUM_REP_TIME = 're_pre'
 
         # Fitting options under Gaussian model 
         # '1' = Unified-time mode 
@@ -63,11 +76,9 @@ class Configuration(object):
         # (str, experimental) methods to aggregate time metrix, default 'SVD'
         # Max SVD Raw
         self.DENSITY = 'SVD'
-
         # (str) whether to reorder cell based on relative positions for time assignment
         # Soft_Reorder (default) Hard (for Independent mode)
         self.REORDER_CELL = 'Soft_Reorder'
-
         # (bool) aggregate gene-specific time to cell time during fitting
         # controlled by self.FIT_OPTION
         self.AGGREGATE_T = True
@@ -95,7 +106,3 @@ class Configuration(object):
 
         # (bool) use raw un/spliced counts or first order moments
         self.USE_RAW = False
-
-        # (bool) selected genes / All 2000 raw genes
-        # if True, would override self.R2_ADJUST and self.OFFSET_GENES
-        self.RAW_GENES = False

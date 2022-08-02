@@ -30,7 +30,7 @@ with io.open(os.path.join(here, 'README.md'), encoding='utf-8') as f:
 
 setup(
     name='unitvelo',
-    version='0.1.6',
+    version='0.2.0',
     # use_scm_version=True,
     # setup_requires=['setuptools_scm'],
 
@@ -62,7 +62,7 @@ setup(
     classifiers=[
         # Full list: https://pypi.python.org/pypi?%3Aaction=list_classifiers
         'License :: OSI Approved :: BSD License',
-        'Development Status :: 3 - Alpha',
+        'Development Status :: 4 - Beta',
         'Intended Audience :: Science/Research',
         'Natural Language :: English',
         'Programming Language :: Python',

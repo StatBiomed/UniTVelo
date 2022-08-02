@@ -6,7 +6,8 @@ from .utils import make_dense, get_weight, R2, new_adata_col
 import scvelo as scv
 from tqdm.notebook import tqdm
 import tensorflow as tf
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '1'
+
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 np.random.seed(42)
 
 class Velocity:
@@ -29,7 +30,6 @@ class Velocity:
 
         self.min_r2 = min_r2
         self.min_ratio = min_ratio
-        self.highly_variable = adata.var['highly_variable'] if 'highly_variable' in adata.var.keys() else None
         
         n_obs, n_vars = self.Ms.shape
         self.gamma = np.zeros(n_vars, dtype=np.float32)
@@ -37,15 +37,11 @@ class Velocity:
         self.velocity_genes = np.ones(n_vars, dtype=np.bool)
         self.residual_scale = np.zeros([n_obs, n_vars], dtype=np.float32)
     
-        self.general = config.GENERAL
         self.perc = perc
         self.fit_offset = fit_offset
-        self.examine_genes = config.EXAMINE_GENE
-        self.adata.uns['examine_genes'] = config.EXAMINE_GENE
         self.config = config
-        self.df_linear = None
 
-    def get_velo_genes(self, gene_ids=None):
+    def get_velo_genes(self):
         variable = self.adata.var
         if variable.index[0].startswith('ENSMUSG'):
             variable.index = variable['gene']
@@ -53,9 +49,11 @@ class Velocity:
         
         weights = get_weight(self.Ms, self.Mu, perc=95)
         Ms, Mu = weights * self.Ms, weights * self.Mu
-        self.gamma_quantile = np.sum(Mu * Ms, axis=0) / np.sum(Ms * Ms, axis=0)
 
+        self.gamma_quantile = np.sum(Mu * Ms, axis=0) / np.sum(Ms * Ms, axis=0)
         self.scaling = np.std(self.Mu, axis=0) / np.std(self.Ms, axis=0)
+        self.adata.layers['Mu_scale'] = self.Mu / self.scaling
+
         if self.config.R2_ADJUST:
             Ms, Mu = self.Ms, self.Mu
 
@@ -66,30 +64,34 @@ class Velocity:
 
         self.velocity_genes = np.ones(Ms.shape[1], dtype=np.bool)
 
-        if self.examine_genes:
+        if type(self.config.VGENES) == str and \
+            self.config.VGENES in self.adata.var.index:
+            self.adata.uns['examine_genes'] = self.config.VGENES
             self.velocity_genes = np.zeros(Ms.shape[1], dtype=np.bool)
             self.velocity_genes[
-                np.argwhere(self.adata.var.index == self.examine_genes)] = True
+                np.argwhere(self.adata.var.index == self.config.VGENES)] = True
 
-        elif gene_ids is not None:
+        elif type(self.config.VGENES) == list:
             temp = []
             for gene in variable.index:
-                if gene in gene_ids:
+                if gene in self.config.VGENES:
                     temp.append(True)
                 else:
                     temp.append(False)
+                    
             self.velocity_genes = np.array(temp)
+            self.adata.var['velocity_gamma'] = self.gamma_ref
 
-        elif self.config.RAW_GENES:
+        elif self.config.VGENES == 'raws':
             self.velocity_genes = np.ones(Ms.shape[1], dtype=np.bool)
 
-        elif self.config.OFFSET_GENES:
+        elif self.config.VGENES == 'offset':
             self.fit_linear(None, self.Ms, self.Mu, 'vgene_offset', coarse=False)
 
             if self.config.FILTER_CELLS:
                 self.fit_linear(None, self.Ms, self.Mu, 'vgene_offset', coarse=True)
 
-        else:
+        elif self.config.VGENES == 'basic':
             self.velocity_genes = (
                 (self.r2 > self.min_r2)
                 & (self.r2 < 0.95)
@@ -109,15 +111,19 @@ class Velocity:
                 )
             print (f'---> # of velocity genes used {self.velocity_genes.sum()}')
 
+            self.adata.var['velocity_gamma'] = self.gamma_ref
+            self.adata.var['velocity_r2'] = self.r2
+
+        else:
+            raise ValueError('Plase specify the correct self.VGENES in configuration file')
+
         if True:
             self.init_weights()
             self.velocity_genes = self.velocity_genes & (self.nobs > 0.05 * Ms.shape[1])
 
-        self.adata.var['velocity_gamma'] = self.gamma_ref
         self.adata.var['scaling'] = self.scaling
         self.adata.var['velocity_genes'] = self.velocity_genes
-        # self.adata.var['fit_r2'] = self.r2
-        self.adata.uns[f"{self.vkey}_params"] = {"mode": self.general, "perc": self.perc}
+        self.adata.uns[f"{self.vkey}_params"] = {"mode": self.config.GENERAL, "perc": self.perc}
         
         if np.sum(self.velocity_genes) < 2:
             print ('---> Low signal in splicing dynamics.')
@@ -164,7 +170,11 @@ class Velocity:
 
             reg = linear_model.LinearRegression()
             for col in tqdm(range(Ms.shape[1])):
-                if coarse == False:
+                if not coarse:
+                    sobs = np.reshape(Ms[:, col], (-1, 1))
+                    uobs = np.reshape(Mu[:, col], (-1, 1))
+
+                else:                
                     if self.config.FILTER_CELLS:
                         nonzero_s = Ms[:, col] > 0
                         nonzero_u = Mu[:, col] > 0
@@ -175,11 +185,7 @@ class Velocity:
                     else:
                         sobs = np.reshape(Ms[:, col], (-1, 1))
                         uobs = np.reshape(Mu[:, col], (-1, 1))
-                
-                else:
-                    sobs = np.reshape(Ms[:, col], (-1, 1))
-                    uobs = np.reshape(Mu[:, col], (-1, 1))                    
-                
+
                 reg.fit(sobs, uobs)
                 u_pred = reg.predict(sobs)
 
@@ -188,11 +194,10 @@ class Velocity:
                 linear.loc[index[col], 'r2'] = r2_score(uobs, u_pred)
 
             self.adata.var['velocity_inter'] = np.array(linear['inter'].values)
+            self.adata.var['velocity_gamma'] = np.array(linear['coef'].values)
+            self.adata.var['velocity_r2'] = np.array(linear['r2'].values)
             self.gamma_ref = np.array(linear['coef'].values)
             self.r2 = np.array(linear['r2'].values)
-
-            if coarse:
-                nonzero_genes = self.velocity_genes
 
             self.velocity_genes = (
                 self.velocity_genes
@@ -211,21 +216,6 @@ class Velocity:
                 & (self.scaling < np.max([ub, 3]))
             )
             print (f'---> # of velocity genes used {self.velocity_genes.sum()}')
-        
-            if coarse:
-                zero_genes = ~(nonzero_genes == self.velocity_genes)
-                zero_genes = self.adata[:, zero_genes].var.index
-                print (zero_genes)
-                print (np.sum((nonzero_genes != self.velocity_genes) 
-                    & (nonzero_genes == True)))
-                print (np.sum((nonzero_genes != self.velocity_genes)
-                    & (self.velocity_genes == True)))
-
-                from .pl import plot_zero_gene_example
-                plot_zero_gene_example(zero_genes, self.adata, 
-                                self.df_linear.loc[zero_genes], linear.loc[zero_genes])
-            
-            self.df_linear = linear
 
         if method == 'bic':
             import statsmodels.api as sm
@@ -257,7 +247,7 @@ class Velocity:
                 linear.loc[index[col], 'bic'] = results.bic
                 linear.loc[index[col], 'llf'] = results.llf
             
-            new_adata_col(self.adata, idx,
+            new_adata_col(self.adata,
                 ['li_coef', 'li_inter', 'li_r2', 'li_loss', 'li_bic', 'li_llf'], 
                 [linear['coef'].values, linear['inter'].values, linear['r2'].values, 
                 linear['loss'].values, linear['bic'].values, linear['llf'].values])
@@ -296,23 +286,19 @@ class Velocity:
 
     def fit_velo_genes(self, basis='umap', rep=1):
         idx = self.velocity_genes
-        Ms, Mu = self.Ms[:, idx], self.Mu[:, idx]
         print (f'---> # of velocity genes used {idx.sum()}')
 
         if self.config.RESCALE_DATA:
-            Ms_scale, Mu_scale = Ms, Mu / (np.std(Mu, axis=0) / np.std(Ms, axis=0))
+            Ms_scale, Mu_scale = \
+                self.Ms, self.Mu / (np.std(self.Mu, axis=0) / np.std(self.Ms, axis=0))
         else:
-            Ms_scale, Mu_scale = Ms, Mu
+            Ms_scale, Mu_scale = self.Ms, self.Mu
 
-        assert self.general in ['Deterministic', 'Curve', 'Linear'], \
-            'self.general not supported'
+        assert self.config.GENERAL in ['Deterministic', 'Curve', 'Linear'], \
+            'Please specify the correct self.GENERAL in configuration file.'
 
-        if self.general == 'Curve':
-            self.adata.layers['Mu_scale'] = \
-                self.Mu / (np.std(self.Mu, axis=0) / np.std(self.Ms, axis=0))
-
-            residual, self.adata = \
-                self.fit_curve(self.adata, idx, Ms_scale, Mu_scale, rep=rep)
+        if self.config.GENERAL == 'Curve':
+            residual, adata = self.fit_curve(self.adata, idx, Ms_scale, Mu_scale, rep=rep)
 
             if False:
                 self.fit_linear(idx, Ms_scale, Mu_scale, method='bic')
@@ -321,29 +307,29 @@ class Velocity:
                 plot_compare_loss(self.adata)
                 plot_compare_bic(self.adata)
 
-        if self.general == 'Deterministic':
-            residual = self.fit_deterministic(idx, Ms, Mu, Ms_scale, Mu_scale)
+        if self.config.GENERAL == 'Deterministic':
+            residual = self.fit_deterministic(idx, self.Ms, self.Mu, Ms_scale, Mu_scale)
 
-        if self.general == 'Linear':
+        if self.config.GENERAL == 'Linear':
             self.fit_linear(idx, Ms_scale, Mu_scale, method='kinetic')
             print (np.sum(self.adata[:, idx].var['kinetic_gene'].values) / \
                     np.sum(self.adata[:, idx].var['velocity_genes'].values))
             return self.adata
+            
+        adata.layers[self.vkey] = residual
 
-        try:
-            self.adata.uns['loss'] = \
-                (self.adata_dyna.uns['loss'], self.adata_mono.uns['loss'])
-        except:
-            self.adata.uns['loss'] = self.adata.uns['loss']
-        self.adata.layers[self.vkey] = residual
-
-        DIR = os.path.split(self.adata.uns['datapath'])[0]
+        DIR = os.path.split(adata.uns['datapath'])[0]
         DIR = os.path.join(DIR, 'figures')
         if not os.path.exists(DIR):
             os.mkdir(DIR)
 
-        if self.examine_genes == False and basis != None:
-            scv.tl.velocity_graph(self.adata, sqrt_transform=True)
-            scv.tl.velocity_embedding(self.adata, basis=basis)
+        if 'examine_genes' not in adata.uns.keys() and basis != None:
+            scv.tl.velocity_graph(adata, sqrt_transform=True)
+            scv.tl.velocity_embedding(adata, basis=basis)
+            scv.tl.latent_time(adata, min_likelihood=None)
+        
+        if self.config.FIT_OPTION == '1':
+            adata.obs['latent_time'] = adata.obs['latent_time_gm']
+            del adata.obs['latent_time_gm']
 
-        return self.adata
+        return adata

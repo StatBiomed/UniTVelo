@@ -1,6 +1,15 @@
 Release History
 ===============
 
+Version 0.2.0
+-------------
+- Beta version of UniTVelo released
+- Provide option of using gene counts for model initialization
+- Provide reference script for choosing unified-time mode or independent mode
+- Provide sampling script when dataset is oversized and GPU memory is bottleneck
+- Re-organize configuration file
+- Number of velocity genes can be amplified during optimization which allows post-analysis on more genes 
+
 Version 0.1.6
 -------------
 - Fix bug for early stopping scenarios
@@ -22,11 +31,9 @@ Version 0.1.3
 
 Version 0.1.2
 -------------
-
 - Fix bugs in setup.py
 - Add tutorials and documentations
 
 Version 0.1.0
 -------------
-
 - Alpha version of UniTVelo released

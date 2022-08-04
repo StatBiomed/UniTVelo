@@ -4,7 +4,7 @@ UniTVelo
 Temporally unified RNA velocity for single cell trajectory inference (UniTVelo) is implementated on Python 3 and TensorFlow 2. 
 The model estimates velocity of each gene and updates cell time based on phase portraits concurrently.
 
-.. image:: https://github.com/StatBiomed/UniTVelo/blob/e5d6f62df122b22a631c1081512faccc0fca640a/figures/HumanBoneMarrow.png?raw=true
+.. image:: https://github.com/StatBiomed/UniTVelo/blob/main/figures/HumanBoneMarrow.png?raw=true
    :width: 300px
    :align: center
 

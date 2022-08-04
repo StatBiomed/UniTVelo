@@ -30,7 +30,7 @@ with io.open(os.path.join(here, 'README.md'), encoding='utf-8') as f:
 
 setup(
     name='unitvelo',
-    version='0.2.0',
+    version='0.2.1',
     # use_scm_version=True,
     # setup_requires=['setuptools_scm'],
 

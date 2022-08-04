@@ -5,15 +5,15 @@ import os
 import numpy as np
 
 def run_model(
-    data_path,
+    adata,
     label,
     config_file=None,
 ):
     """Preparation and pre-processing function of RNA velocity calculation.
     
     Args:
-        data_path (str): 
-            relative of absolute path of Anndata object.
+        adata (str): 
+            takes relative of absolute path of Anndata object as input or directly adata object as well.
         label (str): 
             column name in adata.var indicating cell clusters.
         config_file (object): 
@@ -62,13 +62,39 @@ def run_model(
 
     scv.settings.presenter_view = True
     scv.settings.verbosity = 0
-    scv.settings.figdir = './figures/'
     scv.settings.file_format_figs = 'png'
 
     replicates, pre = None, 1e15
 
-    for rep in range(config.NUM_REP):
+    if type(adata) == str:
+        data_path = adata
         adata = scv.read(data_path)
+    else:
+        cwd = os.getcwd()
+        if os.path.exists(os.path.join(cwd, 'res')):
+            pass
+        else: os.mkdir(os.path.join(cwd, 'res'))
+
+        print (f'Current working dir is {cwd}')
+        print (f'Results will be stored in res folder')
+        data_path = os.path.join(cwd, 'res', 'temp.h5ad')
+
+    scv.pp.filter_and_normalize(adata, min_shared_counts=20, n_top_genes=config.N_TOP_GENES)
+    scv.pp.moments(adata, n_pcs=30, n_neighbors=30)
+
+    remove_dir(data_path, adata)
+    import logging
+    logging.basicConfig(filename=os.path.join(adata.uns['temp'], 'logging.txt'),
+                        filemode='a',
+                        format='%(asctime)s, %(levelname)s, %(message)s',
+                        datefmt='%H:%M:%S',
+                        level=logging.INFO)
+
+    adata_second = adata.copy()
+    for rep in range(config.NUM_REP):        
+        if rep >= 1:
+            adata = adata_second.copy()
+            adata.obs['latent_time_gm'] = pre_time_gm
 
         if config.IROOT == 'gcount':
             adata.obs['gcount'] = np.sum(adata.X.todense() > 0, axis=1)
@@ -80,9 +106,6 @@ def run_model(
         adata.uns['datapath'] = data_path
         adata.uns['label'] = label
         adata.uns['base_function'] = config.BASE_FUNCTION
-        
-        if rep == 1:
-            adata.obs['latent_time_gm'] = pre_time_gm
 
         if 'true_alpha' not in adata.var.columns:
             if config.BASIS is None:
@@ -97,21 +120,10 @@ def run_model(
         else:
             basis = None
 
-        remove_dir(adata.uns['datapath'], adata)
-        scv.pp.filter_and_normalize(adata, min_shared_counts=20, n_top_genes=config.N_TOP_GENES)
-        scv.pp.moments(adata, n_pcs=30, n_neighbors=30)
-
-        import logging
-        logging.basicConfig(filename=os.path.join(adata.uns['temp'], 'logging.txt'),
-                            filemode='a',
-                            format='%(asctime)s, %(levelname)s, %(message)s',
-                            datefmt='%H:%M:%S',
-                            level=logging.INFO)
-
-        if 'scNT' in data_path:
-            import pandas as pd
-            gene_ids = pd.read_csv('../data/scNT/brie_neuron_splicing_time.tsv', delimiter='\t', index_col='GeneID')
-            config.VGENES = list(gene_ids.loc[gene_ids['time_FDR'] < 0.01].index)
+        # if 'scNT' in data_path:
+        #     import pandas as pd
+        #     gene_ids = pd.read_csv('../data/scNT/brie_neuron_splicing_time.tsv', delimiter='\t', index_col='GeneID')
+        #     config.VGENES = list(gene_ids.loc[gene_ids['time_FDR'] < 0.01].index)
 
         model = Velocity(adata, config=config)
         model.get_velo_genes()
@@ -124,7 +136,7 @@ def run_model(
             pre = adata.uns['loss'] if adata.uns['loss'] < pre else pre
 
     #? change adata to replicates?
-    adata.write(os.path.join(adata.uns['temp'], 'temp.h5ad'))
+    replicates.write(os.path.join(adata.uns['temp'], 'temp.h5ad'))
     
     if 'examine_genes' in adata.uns.keys():
         from .individual_gene import exam_genes

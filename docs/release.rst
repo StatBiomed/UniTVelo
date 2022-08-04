@@ -1,6 +1,11 @@
 Release History
 ===============
 
+Version 0.2.1
+-------------
+- Support input of both raw path and adata objects
+- Fix bugs on logging file
+
 Version 0.2.0
 -------------
 - Beta version of UniTVelo released
@@ -8,7 +13,7 @@ Version 0.2.0
 - Provide reference script for choosing unified-time mode or independent mode
 - Provide sampling script when dataset is oversized and GPU memory is bottleneck
 - Re-organize configuration file
-- Number of velocity genes can be amplified during optimization which allows post-analysis on more genes 
+- Number of velocity genes can be amplified (an adjustable hyper-parameter) during optimization which allows post-analysis on more genes 
 
 Version 0.1.6
 -------------

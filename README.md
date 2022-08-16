@@ -53,6 +53,8 @@ pip install git+https://github.com/StatBiomed/UniTVelo
 
 Examples of UniTVelo and steps for reproducible results are provided in Jupyter Notebook under `notebooks` folder. Specifically, please refer to records analyzing [Mouse Erythroid](notebooks/Figure2_ErythroidMouse.ipynb) and [Human Bone Marrow](notebooks/Figure3_BoneMarrow.ipynb) datasets.
 
+UniTVelo has proved its performance through 10 different datasets and 4 of them have been incorporated within scVelo package, see [datasets](notebooks/datasets.md). Others can be obtained via [link](https://connecthkuhk-my.sharepoint.com/:f:/g/personal/gmz1229_connect_hku_hk/EkC47RWWUrtOqcWzJ0neDGEBKLZTHWZW7PPe3vhUo9sn6g?e=QyoLFJ).
+
 ### RNA Velocity on New Dataset
 
 UniTVelo provides an integrated function for velocity analysis by default whilst specific configurations might need to be adjusted accordingly.

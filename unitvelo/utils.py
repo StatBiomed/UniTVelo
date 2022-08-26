@@ -119,6 +119,47 @@ def gene_level_spearman(adata, iroot=None, n_top_genes=2000):
 
     return corr['UniTVelo'].values, corr['scVelo'].values, corr
 
+def gene_level_spearman_slingshot(adata, file_name=None, n_top_genes=2000):
+    """Spearman correlation between the expression profiles fitness (using slingshot)
+        of the top-down (scVelo Dynamical mode) or 
+        bottom-up strategies (UniTVelo Independent mode)
+        Could serve as a systematic comparison (e.g. the entire transcriptome) between two methods    
+    """
+    
+    import scvelo as scv
+    import numpy as np
+    import pandas as pd
+    from .utils import col_spearman
+
+    print ('---> Running scVelo dynamical mode')
+    scvdata = scv.read(adata.uns['datapath'])
+    scv.pp.filter_and_normalize(scvdata, min_shared_counts=20, n_top_genes=n_top_genes)
+    scv.pp.moments(scvdata, n_pcs=30, n_neighbors=30)
+    scv.tl.recover_dynamics(scvdata, n_jobs=20)
+    scv.tl.velocity(scvdata, mode='dynamical')
+
+    print ('---> Generating reference pseudotime with Slingshot')
+    slingshot = pd.read_csv(f'./slingshot/{file_name}')
+    slingshot = slingshot['x'].values
+
+    print ('---> Caculating spearman correlation with reference')
+    if 'organoids' in adata.uns['datapath']:
+        scvdata.var.index = scvdata.var['gene'].values
+
+    index = adata.var.loc[adata.var['velocity_genes'] == True].index.intersection(scvdata.var.loc[scvdata.var['velocity_genes'] == True].index)
+    tadata = adata[:, index].layers['fit_t']
+    tscv = scvdata[:, index].layers['fit_t']
+
+    slingshot = np.broadcast_to(np.reshape(slingshot, (-1, 1)), tadata.shape)
+    resadata = col_spearman(slingshot, tadata)
+    resscv = col_spearman(slingshot, tscv)
+
+    corr = pd.DataFrame(index=index, columns=['UniTVelo', 'scVelo'])
+    corr['UniTVelo'] = np.reshape(resadata, (-1, 1))
+    corr['scVelo'] = np.reshape(resscv, (-1, 1))
+
+    return corr['UniTVelo'].values, corr['scVelo'].values, corr
+
 def gene_level_comparison(corr):
     import seaborn as sns
     import matplotlib.pyplot as plt
@@ -338,7 +379,7 @@ def reverse_transient(adata, time_metric='latent_time'):
 
 def choose_mode(adata, label=None):
     print ('This function works as a reference only.')
-    print ('For less certain scenario, we also suggest user to try both.')
+    print ('For less certain scenario, we also suggest users to try both.')
     print ('---> Checking cell cycle scores...')
 
     from .utils import get_cgene_list
@@ -384,7 +425,7 @@ def choose_mode(adata, label=None):
         else:
             print ('Unified-time mode is recommended, consider setting config.FIT_OPTION = 1')
 
-def subset_adata(adata, label=None, proportion=0.5):
+def subset_adata(adata, label=None, proportion=0.5, min_cells=50):
     adata.obs['cid'] = list(range(adata.shape[0]))
     ctype = list(set(adata.obs[label].values))
 
@@ -394,8 +435,10 @@ def subset_adata(adata, label=None, proportion=0.5):
         temp = adata[adata.obs.loc[adata.obs[label] == type].index, :]
         temp_id = temp.obs['cid'].values
 
-        if len(temp_id) < 50:
+        if len(temp_id) <= min_cells:
             subset.extend(list(temp_id))
+        elif int(temp.shape[0] * proportion) <= min_cells:
+            subset.extend(list(np.random.choice(temp_id, size=min_cells, replace=False)))
         else:
             subset.extend(list(np.random.choice(temp_id, size=int(temp.shape[0] * proportion), replace=False)))
         

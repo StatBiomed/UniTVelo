@@ -8,6 +8,7 @@ def run_model(
     adata,
     label,
     config_file=None,
+    normalize=True
 ):
     """Preparation and pre-processing function of RNA velocity calculation.
     
@@ -79,8 +80,11 @@ def run_model(
         print (f'Results will be stored in res folder')
         data_path = os.path.join(cwd, 'res', 'temp.h5ad')
 
-    scv.pp.filter_and_normalize(adata, min_shared_counts=20, n_top_genes=config.N_TOP_GENES)
-    scv.pp.moments(adata, n_pcs=30, n_neighbors=30)
+    if normalize:
+        scv.pp.filter_and_normalize(adata, min_shared_counts=20, n_top_genes=config.N_TOP_GENES)
+        scv.pp.moments(adata, n_pcs=30, n_neighbors=30)
+    else:
+        scv.pp.neighbors(adata)
 
     remove_dir(data_path, adata)
     import logging
@@ -136,7 +140,7 @@ def run_model(
             pre = adata.uns['loss'] if adata.uns['loss'] < pre else pre
 
     #? change adata to replicates?
-    replicates.write(os.path.join(adata.uns['temp'], 'temp.h5ad'))
+    replicates.write(os.path.join(adata.uns['temp'], f'temp_{config.FIT_OPTION}.h5ad'))
     
     if 'examine_genes' in adata.uns.keys():
         from .individual_gene import exam_genes

@@ -44,3 +44,4 @@ UniTVelo has proved its robustness in 10 different datasets. Details can be foun
    Figure2_ErythroidMouse
    Figure3_BoneMarrow
    Figure4_IntestinalOrganoid
+   AuxiliaryFunctions

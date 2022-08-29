@@ -34,7 +34,8 @@ notebooks_url = "https://github.com/StatBiomed/UniTVelo/raw/main/notebooks/"
 notebooks = [
     "Figure2_ErythroidMouse.ipynb",
     "Figure3_BoneMarrow.ipynb",
-    "Figure4_IntestinalOrganoid.ipynb"
+    "Figure4_IntestinalOrganoid.ipynb",
+    "AuxiliaryFunctions.ipynb"
 ]
 for nb in notebooks:
     try:

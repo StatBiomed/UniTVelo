@@ -74,11 +74,13 @@ def col_spearman_unorm(raw, fit):
 
     return np.array(res)
 
-def gene_level_spearman(adata, iroot=None, n_top_genes=2000):
-    """Spearman correlation between the expression profiles fitness 
-        of the top-down (scVelo Dynamical mode) or 
-        bottom-up strategies (UniTVelo Independent mode)
-        Could serve as a systematic comparison (e.g. the entire transcriptome) between two methods    
+def gene_level_spearman(adata, iroot=None, n_top_genes=2000, file_name=None):
+    """
+    Spearman correlation between the expression profiles fitness 
+    of the top-down (scVelo Dynamical mode) or 
+    bottom-up strategies (UniTVelo Independent mode)
+    Could serve as a systematic comparison (e.g. the entire transcriptome) 
+    between two methods    
     """
     
     import scvelo as scv
@@ -86,6 +88,7 @@ def gene_level_spearman(adata, iroot=None, n_top_genes=2000):
     import numpy as np
     import pandas as pd
     from .utils import col_spearman
+    from scipy.stats import spearmanr
 
     print ('---> Running scVelo dynamical mode')
     scvdata = scv.read(adata.uns['datapath'])
@@ -93,12 +96,7 @@ def gene_level_spearman(adata, iroot=None, n_top_genes=2000):
     scv.pp.moments(scvdata, n_pcs=30, n_neighbors=30)
     scv.tl.recover_dynamics(scvdata, n_jobs=20)
     scv.tl.velocity(scvdata, mode='dynamical')
-
-    print ('---> Generating reference with diffusion pseudotime')
-    sc.tl.diffmap(adata)
-    adata.uns['iroot'] = np.flatnonzero(adata.obs[adata.uns['label']] == iroot)[0]
-    sc.tl.dpt(adata)
-    # scv.pl.scatter(adata, color='dpt_pseudotime', cmap='gnuplot', dpi=100, size=20)
+    scv.tl.latent_time(scvdata)
 
     print ('---> Caculating spearman correlation with reference')
     if 'organoids' in adata.uns['datapath']:
@@ -108,51 +106,31 @@ def gene_level_spearman(adata, iroot=None, n_top_genes=2000):
     tadata = adata[:, index].layers['fit_t']
     tscv = scvdata[:, index].layers['fit_t']
 
-    gt = adata.obs['dpt_pseudotime'].values
-    gt = np.broadcast_to(np.reshape(gt, (-1, 1)), tadata.shape)
-    resadata = col_spearman(gt, tadata)
-    resscv = col_spearman(gt, tscv)
+    if iroot != None:
+        print ('---> Generating reference with diffusion pseudotime')
+        sc.tl.diffmap(adata)
+        adata.uns['iroot'] = np.flatnonzero(adata.obs[adata.uns['label']] == iroot)[0]
+        sc.tl.dpt(adata)
 
-    corr = pd.DataFrame(index=index, columns=['UniTVelo', 'scVelo'])
-    corr['UniTVelo'] = np.reshape(resadata, (-1, 1))
-    corr['scVelo'] = np.reshape(resscv, (-1, 1))
+        gt = adata.obs['dpt_pseudotime'].values
+        gt = np.broadcast_to(np.reshape(gt, (-1, 1)), tadata.shape)
+        resadata = col_spearman(gt, tadata)
+        resscv = col_spearman(gt, tscv)
 
-    return corr['UniTVelo'].values, corr['scVelo'].values, corr
+        results, _ = spearmanr(min_max(scvdata.obs['latent_time']), min_max(gt))
+        print (np.reshape(results, (-1, 1)))
 
-def gene_level_spearman_slingshot(adata, file_name=None, n_top_genes=2000):
-    """Spearman correlation between the expression profiles fitness (using slingshot)
-        of the top-down (scVelo Dynamical mode) or 
-        bottom-up strategies (UniTVelo Independent mode)
-        Could serve as a systematic comparison (e.g. the entire transcriptome) between two methods    
-    """
-    
-    import scvelo as scv
-    import numpy as np
-    import pandas as pd
-    from .utils import col_spearman
+    if file_name != None:
+        print ('---> Generating reference pseudotime with Slingshot')
+        slingshot = pd.read_csv(f'./slingshot/{file_name}')
+        slingshot = slingshot['x'].values
 
-    print ('---> Running scVelo dynamical mode')
-    scvdata = scv.read(adata.uns['datapath'])
-    scv.pp.filter_and_normalize(scvdata, min_shared_counts=20, n_top_genes=n_top_genes)
-    scv.pp.moments(scvdata, n_pcs=30, n_neighbors=30)
-    scv.tl.recover_dynamics(scvdata, n_jobs=20)
-    scv.tl.velocity(scvdata, mode='dynamical')
+        slingshot = np.broadcast_to(np.reshape(slingshot, (-1, 1)), tadata.shape)
+        resadata = col_spearman(slingshot, tadata)
+        resscv = col_spearman(slingshot, tscv)
 
-    print ('---> Generating reference pseudotime with Slingshot')
-    slingshot = pd.read_csv(f'./slingshot/{file_name}')
-    slingshot = slingshot['x'].values
-
-    print ('---> Caculating spearman correlation with reference')
-    if 'organoids' in adata.uns['datapath']:
-        scvdata.var.index = scvdata.var['gene'].values
-
-    index = adata.var.loc[adata.var['velocity_genes'] == True].index.intersection(scvdata.var.loc[scvdata.var['velocity_genes'] == True].index)
-    tadata = adata[:, index].layers['fit_t']
-    tscv = scvdata[:, index].layers['fit_t']
-
-    slingshot = np.broadcast_to(np.reshape(slingshot, (-1, 1)), tadata.shape)
-    resadata = col_spearman(slingshot, tadata)
-    resscv = col_spearman(slingshot, tscv)
+        results, _ = spearmanr(min_max(scvdata.obs['latent_time']), min_max(slingshot[:, 0]))
+        print (np.reshape(results, (-1, 1)))
 
     corr = pd.DataFrame(index=index, columns=['UniTVelo', 'scVelo'])
     corr['UniTVelo'] = np.reshape(resadata, (-1, 1))
@@ -443,3 +421,83 @@ def subset_adata(adata, label=None, proportion=0.5, min_cells=50):
             subset.extend(list(np.random.choice(temp_id, size=int(temp.shape[0] * proportion), replace=False)))
         
     return adata[np.array(subset), :]
+
+def subset_prediction(adata_subset, adata, config=None):
+    from .optimize_utils import Model_Utils
+
+    model = Model_Utils(adata, config=config)
+    x = model.init_time((0, 1), (3000, adata.n_vars))
+    
+    adata.var = adata_subset.var.copy()
+    adata.uns['basis'] = adata_subset.uns['basis']
+    adata.uns['label'] = adata_subset.uns['label']
+    adata.uns['par_names'] = adata_subset.uns['par_names']
+    adata.uns['base_function'] = adata_subset.uns['base_function']
+
+    model.total_genes = adata.var['velocity_genes'].values
+    model.idx = adata.var['velocity_genes'].values
+    scaling = adata.var['scaling'].values
+
+    args_shape = (1, adata.n_vars)
+    args = [
+        np.broadcast_to(np.log(np.array(adata.var['fit_gamma'].values)), args_shape), 
+        np.broadcast_to(np.log(np.array(adata.var['fit_beta'].values * scaling)), args_shape), 
+        np.broadcast_to(np.array(adata.var['fit_offset0'].values), args_shape), 
+        np.broadcast_to(np.log(np.array(adata.var['fit_a0'].values)), args_shape), 
+        np.broadcast_to(np.array(adata.var['fit_t0'].values), args_shape), 
+        np.broadcast_to(np.log(np.array(adata.var['fit_h0'].values)), args_shape), 
+        np.broadcast_to(np.array(adata.var['fit_intercept'].values / scaling), args_shape)
+    ]
+
+    s_predict, s_deri_predict, u_predict = \
+        model.get_fit_s(args, x), model.get_s_deri(args, x), model.get_fit_u(x)
+    s_predict = tf.expand_dims(s_predict, axis=0) # 1 3000 d
+    u_predict = tf.expand_dims(u_predict, axis=0)
+    Mu = tf.expand_dims(adata.layers['Mu'] / scaling, axis=1) # n 1 d
+    Ms = tf.expand_dims(adata.layers['Ms'], axis=1)
+
+    t_cell = model.match_time(Ms, Mu, s_predict, u_predict, x.numpy(), config.MAX_ITER)
+    t_cell = np.reshape(t_cell, (-1, 1))
+    t_cell = np.broadcast_to(t_cell, adata.shape)
+
+    adata.layers['fit_t'] = t_cell.copy()
+    adata.layers['fit_t'][:, ~adata.var['velocity_genes'].values] = np.nan
+    
+    model.fit_s = model.get_fit_s(args, t_cell).numpy()
+    model.s_deri = model.get_s_deri(args, t_cell).numpy()
+    model.fit_u = model.get_fit_u(args).numpy()
+    adata.layers['velocity'] = model.s_deri
+    
+    adata.obs['latent_time_gm'] = min_max(np.nanmean(adata.layers['fit_t'], axis=1))
+    scv.tl.velocity_graph(adata, sqrt_transform=True)
+    scv.tl.velocity_embedding(adata, basis=adata.uns['basis'])
+    scv.tl.latent_time(adata, min_likelihood=None)
+        
+    if config.FIT_OPTION == '1':
+        adata.obs['latent_time'] = adata.obs['latent_time_gm']
+        del adata.obs['latent_time_gm']
+    
+    if os.path.exists(os.path.join(adata_subset.uns['temp'], 'prediction')):
+        pass
+    else: os.mkdir(os.path.join(adata_subset.uns['temp'], 'prediction'))
+    adata.uns['temp'] = os.path.join(adata_subset.uns['temp'], 'prediction')
+
+    import shutil
+    shutil.copyfile(os.path.join(adata_subset.uns['temp'], 'fitvar.csv'), 
+                    os.path.join(adata.uns['temp'], 'fitvar.csv'))
+    
+    import pandas as pd
+    s = pd.DataFrame(data=model.fit_s, index=adata.obs.index, columns=adata.var.index)
+    u = pd.DataFrame(data=model.fit_u, index=adata.obs.index, columns=adata.var.index)
+    ms = pd.DataFrame(data=adata.layers['Ms'], index=adata.obs.index, columns=adata.var.index)
+    mu = pd.DataFrame(data=adata.layers['Mu'], index=adata.obs.index, columns=adata.var.index)
+    s['label'] = adata.obs[adata.uns['label']].values
+
+    NEW_DIR = adata.uns['temp']
+    s.to_csv(f'{NEW_DIR}/fits.csv')
+    u.to_csv(f'{NEW_DIR}/fitu.csv')
+    ms.to_csv(f'{NEW_DIR}/Ms.csv')
+    mu.to_csv(f'{NEW_DIR}/Mu.csv')
+    adata.write(os.path.join(NEW_DIR, f'predict_adata.h5ad'))
+
+    return adata

@@ -1,6 +1,12 @@
 Release History
 ===============
 
+Version 0.2.2
+-------------
+- Add benchmarking function to scVelo
+- Provide prediction script which uses down-sampled data to predict RNA velocity and cell time on entire dataset
+- Fix bug in utils.py
+
 Version 0.2.1
 -------------
 - Support input of both raw path and adata objects

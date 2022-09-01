@@ -41,7 +41,7 @@ class Configuration(object):
         # (float) threshold of R2 at later stage of the optimization proces
         # to capture the dynamics of more genes beside initially selected velocity genes
         # Note: self.AGENES_R2 = 1 will switch to origianl mode with no amplification stage
-        self.AGENES_R2 = 0.35
+        self.AGENES_R2 = 1
         self.AGENES_THRES = 0.61
 
         # (bool, experimental) exclude cell that have 0 expression in either un/spliced when contributing to loss function

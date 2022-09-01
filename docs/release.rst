@@ -1,6 +1,10 @@
 Release History
 ===============
 
+Version 0.2.3
+-------------
+- Change threshold for self.AGENES_R2
+
 Version 0.2.2
 -------------
 - Add benchmarking function to scVelo

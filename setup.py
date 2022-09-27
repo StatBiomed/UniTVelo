@@ -7,7 +7,7 @@ from setuptools import setup, find_packages
 REQUIRED = [
     'numpy',
     'scikit-learn>=0.22',
-    'pandas',
+    'pandas==1.4.2',
     'scipy>=1.4.1',
     'seaborn',
     'matplotlib>=3.3.0',
@@ -19,7 +19,7 @@ REQUIRED = [
     'IPython',
     'ipykernel',
     'IProgress',
-    'ipywidgets',
+    'ipywidgets==7.7.0',
     'jupyter',
     'tensorflow>=2.4.1'
 ]
@@ -30,7 +30,7 @@ with io.open(os.path.join(here, 'README.md'), encoding='utf-8') as f:
 
 setup(
     name='unitvelo',
-    version='0.2.4.1',
+    version='0.2.4.2',
     # use_scm_version=True,
     # setup_requires=['setuptools_scm'],
 

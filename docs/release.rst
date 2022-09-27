@@ -1,6 +1,11 @@
 Release History
 ===============
 
+Version 0.2.4
+-------------
+- Support the input of one or multiple genes trends to initialize cell time, see config.py, parameter self.IROOT
+- Re-formulate the structure of configuratioin file 
+
 Version 0.2.3
 -------------
 - Change threshold for self.AGENES_R2

@@ -2,6 +2,7 @@
 import tensorflow as tf
 import numpy as np
 import logging
+from .utils import min_max
 np.random.seed(42)
 
 exp = tf.math.exp
@@ -104,6 +105,15 @@ class Model_Utils():
                     tf.Variable(
                         tf.reshape(init_inter, (1, self.adata.n_vars)), 
                         name='intercept')
+
+            if type(self.config.GENE_PRIOR) == list:
+                vgenes_temp = []
+                prior_t = np.ones((1, ngenes), dtype=np.float32) * 0.5
+                for prior in self.config.GENE_PRIOR:
+                    prior_t[0][prior[2]] = 1.1 if prior[1] == 'increase' else -0.2
+                    vgenes_temp.append(prior + (prior_t[0][prior[2]], ))
+                self.t = tf.Variable(prior_t, name='t')
+                print (f'Modified GENE_PRIOR {vgenes_temp} with init_tau')
          
         if self.mode == 'Mixture':
             init_t = np.reshape(np.sort(np.random.uniform(-1, 1, self.K)), (-1, 1))
@@ -232,16 +242,39 @@ class Model_Utils():
             return tf.cast(mean(dis_approx, axis=1), tf.float32)
 
         if self.config.DENSITY == 'Raw':
-            return tf.cast(mean(dis, axis=1), tf.float32)
+            weight = self.gene_prior_perc(dis)
+            # print (f'{weight[0][254], weight[0][22], weight[0][0]}')
+            return tf.cast(sum(dis * weight, axis=1), tf.float32)
+
+    def gene_prior_perc(self, dis):
+        perc, perc_idx = [], []
+        aggregrate_weight = np.ones((dis.shape[1], ), dtype=np.float32)
+    
+        for prior in self.config.GENE_PRIOR:
+            expr = np.array(self.adata[:, prior[0]].layers['Ms'])
+            perc.append(np.max(expr) * 0.75) # modify 0.75 for parameter tuning
+        
+        perc_total = np.sum(perc)
+        perc = [perc[i] / perc_total for i in range(len(perc))]
+
+        for sequence, prior in enumerate(self.config.GENE_PRIOR):
+            temp_id = np.sum(self.boolean[:prior[2]])
+            aggregrate_weight[temp_id] = perc[sequence] * self.config.GENE_PRIOR_SCALE
+            perc_idx.append(temp_id)
+
+        # print (f'assigned weights of GENE_PRIOR {list(np.around(np.array(perc), 2)), perc_idx}')
+        weight_total = np.sum(aggregrate_weight)
+        aggregrate_weight = [aggregrate_weight[i] / weight_total for i in range(len(aggregrate_weight))]
+        return np.reshape(aggregrate_weight, (1, dis.shape[1]))
 
     def match_time(self, Ms, Mu, s_predict, u_predict, x, iter):
         val = x[1, :] - x[0, :]
         cell_time = np.zeros((Ms.shape[0], Ms.shape[2]))
 
         if (self.config.AGENES_R2 < 1) & (iter > self.agenes_thres):
-            self.index_list = np.squeeze(tf.where(self.total_genes))
+            self.index_list, self.boolean = np.squeeze(tf.where(self.total_genes)), self.total_genes
         else:
-            self.index_list = np.squeeze(tf.where(self.idx))
+            self.index_list, self.boolean = np.squeeze(tf.where(self.idx)), self.idx
 
         for index in range(Ms.shape[2]):
             if index in self.index_list:

@@ -128,6 +128,13 @@ class Velocity:
         if np.sum(self.velocity_genes) < 2:
             print ('---> Low signal in splicing dynamics.')
 
+        from .utils import prior_trend_valid
+        if type(self.config.IROOT) == list:
+            self.config.IROOT = prior_trend_valid(self.adata, self.config.IROOT, 'IROOT')
+        
+        if type(self.config.GENE_PRIOR) == list:
+            self.config.GENE_PRIOR = prior_trend_valid(self.adata, self.config.GENE_PRIOR, 'GENE_PRIOR')
+
     def init_weights(self):
         nonzero_s, nonzero_u = self.Ms > 0, self.Mu > 0
         weights = np.array(nonzero_s & nonzero_u, dtype=bool)
@@ -317,11 +324,6 @@ class Velocity:
             return self.adata
             
         adata.layers[self.vkey] = residual
-
-        DIR = os.path.split(adata.uns['datapath'])[0]
-        DIR = os.path.join(DIR, 'figures')
-        if not os.path.exists(DIR):
-            os.mkdir(DIR)
 
         if 'examine_genes' not in adata.uns.keys() and basis != None:
             scv.tl.velocity_graph(adata, sqrt_transform=True)

@@ -66,6 +66,7 @@ def run_model(
     if len(para_used) == 0:
         print ('None')
 
+    print (f'\n')
     print ('-------> Model Configuration Settings <------')
     default_para = ['N_TOP_GENES', 
                     'LEARNING_RATE', 

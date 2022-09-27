@@ -1,0 +1,11 @@
+cff-version: 1.2.0
+message: "If you use this package, please cite it as below."
+authors:
+- family-names: "GAO"
+  given-names: "MINGZE"
+  orcid: "https://orcid.org/0000-0002-8795-3861"
+title: "UniTVelo"
+version: 0.2.3
+doi: 10.5281/zenodo.7112387
+date-released: 2022-09-25
+url: "https://github.com/StatBiomed/UniTVelo"

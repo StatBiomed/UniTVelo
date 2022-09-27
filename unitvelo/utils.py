@@ -285,7 +285,7 @@ def OLS(x, y):
 def get_model_para(adata):
     var = adata.var.loc[adata.var['velocity_genes'] == True]
     var = var[[
-        'scaling', 'velocity_genes', 'fit_vars',
+        'scaling', 'fit_vars',
         'fit_varu', 'fit_gamma', 'fit_beta', 'fit_offset0', 
         'fit_a0', 'fit_t0', 'fit_h0', 
         'fit_intercept', 'fit_loss', 'fit_bic', 
@@ -501,3 +501,27 @@ def subset_prediction(adata_subset, adata, config=None):
     adata.write(os.path.join(NEW_DIR, f'predict_adata.h5ad'))
 
     return adata
+
+def prior_trend_valid(adata, gene_list=None, name='IROOT'):
+    import sys
+    vgenes_temp = []
+    vgenes = adata.var.loc[adata.var['velocity_genes'] == True].index
+
+    file_path = os.path.join(adata.uns['temp'], 'vgenes.txt')
+    with open(file_path, 'w') as fp:
+        for item in vgenes:
+            fp.write("%s\n" % item)
+
+    for prior in gene_list:
+        if prior[0] not in vgenes:
+            print (f'{prior[0]} of {name} has not been identified as a velocity gene')
+        else:
+            vgenes_temp.append(prior + (list(adata.var.index).index(prior[0]), ))
+    
+    if len(vgenes_temp) == 0:
+        print (f'---> No genes has been identified as velocity genes')
+        print (f'Consider selecting one from {file_path}')
+        sys.exit()
+    else:
+        print (f'Modified {name} {vgenes_temp} with index')
+        return vgenes_temp

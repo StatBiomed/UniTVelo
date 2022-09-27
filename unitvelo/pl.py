@@ -4,6 +4,7 @@ import scvelo as scv
 from IPython import display
 import seaborn as sns
 import numpy as np
+import os
 from .individual_gene import Validation
 
 def plot_zero_gene_example(gene_name, adata, nonzero_para, zero_para):
@@ -41,11 +42,11 @@ def plot_zero_gene_example(gene_name, adata, nonzero_para, zero_para):
         axes[i][1].set_ylabel(f'({nonzero_r2}, {zero_r2})')
 
     plt.show()
-    fig.savefig(f'./figures/Gene_Filter_ByZero.png', dpi=300)
+    fig.savefig(os.path.join(adata.uns['temp'], 'Gene_Filter_ByZero.png'), dpi=300)
     from .pl import plot_zero_gene_distribution
     plot_zero_gene_distribution(nonzero_para, zero_para)
 
-def plot_zero_gene_distribution(nonzero_para, zero_para):
+def plot_zero_gene_distribution(nonzero_para, zero_para, adata=None):
     fig, axes = plt.subplots(2, 2, figsize=(12, 10))
     sns.distplot(nonzero_para['coef'].values, ax=axes[0][0], kde=False)
     axes[0][0].set_title('Nonzero genes coefficient')
@@ -59,7 +60,7 @@ def plot_zero_gene_distribution(nonzero_para, zero_para):
     sns.distplot(zero_para['r2'].values, ax=axes[1][1], kde=False)
     axes[1][1].set_title('Zero genes r2')
     plt.show()
-    fig.savefig(f'./figures/Gene_Filter_ByZero_Distribution.png', dpi=300)
+    fig.savefig(os.path.join(adata.uns['temp'], 'Gene_Filter_ByZero_Distribution.png'), dpi=300)
 
 def plot_range(
     gene_name, 
@@ -160,7 +161,7 @@ def plot_range(
         plt.show()
 
         if save_fig:
-            plt.savefig(f'./figures/GM_{gene_name}.png', dpi=300, bbox_inches='tight')
+            plt.savefig(os.path.join(adata.uns['temp'], f'GM_{gene_name}.png'), dpi=300, bbox_inches='tight')
         
         #! solving the starting and ending timepoint of phase portraits afterwards
         if show_temporal:
@@ -231,7 +232,7 @@ def plot_range(
 
             plt.show()
             if save_fig:
-                plt.savefig(f'./figures/GM_{gene_name}_temporal.png', dpi=300, bbox_inches='tight')
+                plt.savefig(os.path.join(adata.uns['temp'], f'GM_{gene_name}_temporal.png'), dpi=300, bbox_inches='tight')
 
 def plot_phase_portrait(adata, args, sobs, uobs, spre, upre):
     if 'examine_genes' in adata.uns.keys():

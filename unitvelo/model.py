@@ -55,8 +55,8 @@ class Recover_Paras(Model_Utils):
         if args != None:
             boundary = (args[4] - 3 * (1 / sqrt(2 * exp(args[3]))), 
                         args[4] + 3 * (1 / sqrt(2 * exp(args[3]))))
-            range = boundary if self.config.RESCALE_TIME else (0, 1)
-            x = self.init_time(range, (3000, self.adata.n_vars))
+            t_range = boundary if self.config.RESCALE_TIME else (0, 1)
+            x = self.init_time(t_range, (3000, self.adata.n_vars))
 
             s_predict, u_predict = self.get_s_u(args, x)
             s_predict = tf.expand_dims(s_predict, axis=0) # 1 3000 d
@@ -65,7 +65,6 @@ class Recover_Paras(Model_Utils):
             Ms = tf.expand_dims(self.Ms, axis=1)
 
             t_cell = self.match_time(Ms, Mu, s_predict, u_predict, x.numpy(), iter)
-            logging.info(f'iter {iter}')
 
             if self.config.AGGREGATE_T:
                 t_cell = tf.reshape(t_cell, (-1, 1))
@@ -93,16 +92,32 @@ class Recover_Paras(Model_Utils):
 
             if self.config.IROOT == 'gcount':
                 print ('---> Use Gene Counts as initial.')
-                scv.pl.scatter(self.adata, color='gcount', cmap='gnuplot')
+                self.adata.obs['gcount'] = np.sum(self.adata.X.todense() > 0, axis=1)
+                g_time = 1 - min_max(self.adata.obs.groupby(self.adata.uns['label'])['gcount'].mean())
 
+                for id in list(g_time.index):
+                    self.adata.obs.loc[self.adata.obs[self.adata.uns['label']] == id, 'gcount'] = g_time[id]
+
+                scv.pl.scatter(self.adata, color='gcount', cmap='gnuplot')
                 t_cell = tf.cast(
                     tf.broadcast_to(
                         self.adata.obs['gcount'].values.reshape(-1, 1), 
                         self.adata.shape), 
                     tf.float32)
 
-            elif self.config.IROOT in self.adata.var.index:
-                pass
+            elif type(self.config.IROOT) == list:
+                t_cell, perc = [], []
+                for prior in self.config.IROOT:
+                    expr = np.array(self.adata[:, prior[0]].layers['Ms'])
+
+                    perc.append(np.max(expr) * 0.75) # modify 0.75 for parameter tuning
+                    t_cell.append(min_max(expr) if prior[1] == 'increase' else 1 - min_max(expr))
+                
+                perc_total = np.sum(perc)
+                perc = [perc[i] / perc_total for i in range(len(perc))]
+                print (f'assigned weights of IROOT {list(np.around(np.array(perc), 2))}')
+                t_cell = [perc[i] * t_cell[i] for i in range(len(perc))]
+                t_cell = tf.cast(tf.broadcast_to(np.sum(t_cell, axis=0).reshape(-1, 1), self.adata.shape), tf.float32)
 
             elif self.config.IROOT in self.adata.obs[self.adata.uns['label']].values:
                 print ('---> Use Diffusion Pseudotime as initial.')
@@ -123,8 +138,6 @@ class Recover_Paras(Model_Utils):
         
             else:
                 pass
-
-            # print (t_cell.numpy()[0:5, 0])
 
         return t_cell
 
@@ -307,6 +320,18 @@ class Recover_Paras(Model_Utils):
             else:
                 convert = tf.cast(self.idx, tf.float32)
                 processed_grads = [g * convert for g in gradients]
+
+            # if (type(self.config.GENE_PRIOR) == list) & (self.config.FIT_OPTION == '1'):
+            #     update = np.ones((1, Ms.shape[1]))
+            #     for prior in self.config.GENE_PRIOR:
+            #         update[0][prior[2]] = 0
+
+            #     if len(processed_grads) == 4:
+            #         processed_grads[2] = processed_grads[2] * update
+            #         logging.info(f'iter {iter}, {self.config.GENE_PRIOR[0][0]}, {processed_grads[2].numpy()[0][self.config.GENE_PRIOR[0][2]], args[4].numpy()[0][self.config.GENE_PRIOR[0][2]]}, {self.config.GENE_PRIOR[1][0]}, {processed_grads[2].numpy()[0][self.config.GENE_PRIOR[1][2]], args[4].numpy()[0][self.config.GENE_PRIOR[1][2]]}')
+            #     if len(processed_grads) == 7:
+            #         processed_grads[4] = processed_grads[4] * update
+            #         logging.info(f'iter {iter}, {self.config.GENE_PRIOR[0][0]}, {processed_grads[4].numpy()[0][self.config.GENE_PRIOR[0][2]], args[4].numpy()[0][self.config.GENE_PRIOR[0][2]]}, {self.config.GENE_PRIOR[1][0]}, {processed_grads[4].numpy()[0][self.config.GENE_PRIOR[1][2]], args[4].numpy()[0][self.config.GENE_PRIOR[1][2]]}')
 
             optimizer.apply_gradients(zip(processed_grads, args_to_optimize))
             pre = obj

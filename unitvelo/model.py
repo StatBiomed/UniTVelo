@@ -98,7 +98,7 @@ class Recover_Paras(Model_Utils):
                 for id in list(g_time.index):
                     self.adata.obs.loc[self.adata.obs[self.adata.uns['label']] == id, 'gcount'] = g_time[id]
 
-                scv.pl.scatter(self.adata, color='gcount', cmap='gnuplot')
+                scv.pl.scatter(self.adata, color='gcount', cmap='gnuplot', dpi=100)
                 t_cell = tf.cast(
                     tf.broadcast_to(
                         self.adata.obs['gcount'].values.reshape(-1, 1), 
@@ -129,7 +129,7 @@ class Recover_Paras(Model_Utils):
                     )[0]
                 sc.tl.dpt(self.adata)
 
-                scv.pl.scatter(self.adata, color='dpt_pseudotime', cmap='gnuplot')
+                scv.pl.scatter(self.adata, color='dpt_pseudotime', cmap='gnuplot', dpi=100)
                 t_cell = tf.cast(
                     tf.broadcast_to(
                         self.adata.obs['dpt_pseudotime'].values.reshape(-1, 1), 

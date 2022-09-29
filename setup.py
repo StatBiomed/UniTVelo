@@ -19,7 +19,7 @@ REQUIRED = [
     'IPython',
     'ipykernel',
     'IProgress',
-    'ipywidgets==7.7.0',
+    'ipywidgets',
     'jupyter',
     'tensorflow>=2.4.1'
 ]
@@ -30,7 +30,7 @@ with io.open(os.path.join(here, 'README.md'), encoding='utf-8') as f:
 
 setup(
     name='unitvelo',
-    version='0.2.4.2',
+    version='0.2.4.3',
     # use_scm_version=True,
     # setup_requires=['setuptools_scm'],
 

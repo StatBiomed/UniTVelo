@@ -2,7 +2,7 @@ import tensorflow as tf
 import numpy as np
 import logging
 from scvelo.tools.utils import make_unique_list
-from tqdm.notebook import tqdm
+from tqdm import tqdm
 import scvelo as scv
 from .optimize_utils import Model_Utils, exp_args
 from .utils import save_vars, new_adata_col, min_max
@@ -179,7 +179,7 @@ class Recover_Paras(Model_Utils):
         self.adata.var['amplify_infi'] = self.infi_genes
         print (f'# of infinite (or nan) genes {self.infi_genes.sum()}')
 
-    def compute_loss(self, args, t_cell, Ms, Mu, iter):
+    def compute_loss(self, args, t_cell, Ms, Mu, iter, qc_trick):
         self.s_func, self.u_func = self.get_s_u(args, t_cell)
         udiff, sdiff = Mu - self.u_func, Ms - self.s_func
 
@@ -215,7 +215,7 @@ class Recover_Paras(Model_Utils):
             error_1 = sum(self.u_r2, axis=0).numpy()[self.total_genes]
             error_2 = sum(self.s_r2, axis=0).numpy()[self.total_genes]
             self.se.append(int(np.sum(error_1) + np.sum(error_2)))
-            print ("\r", f'{self.se[-1]:,}', sep=' | ', end="")
+            qc_trick.set_description(f'{self.se[-1]:,}')
 
             return self.get_loss(iter,
                                 sum(self.s_r2, axis=0), 
@@ -246,7 +246,7 @@ class Recover_Paras(Model_Utils):
 
             error = sum(self.u_r2 + self.s_r2, axis=0).numpy()[self.idx]
             self.se.append(int(np.sum(error)))
-            print ("\r", f'{self.se[-1]:,}', sep=' | ', end="")
+            qc_trick.set_description(f'{self.se[-1]:,}')
             
             self.vgene_loss = self.se[-1]
             return self.get_loss(iter,
@@ -265,7 +265,8 @@ class Recover_Paras(Model_Utils):
         self.se, self.m_args, self.m_ur2, self.m_sr2 = [], None, None, None
         self.m_ullf, self.m_sllf = None, None
 
-        for iter in tqdm(range(self.config.MAX_ITER)):
+        qc_trick = tqdm(range(self.config.MAX_ITER))
+        for iter in qc_trick:
             with tf.GradientTape() as tape:                
                 args = [
                     gamma, 
@@ -276,7 +277,7 @@ class Recover_Paras(Model_Utils):
                     h, 
                     intercept
                 ]
-                obj = self.compute_loss(args, t_cell, Ms, Mu, iter)
+                obj = self.compute_loss(args, t_cell, Ms, Mu, iter, qc_trick)
 
             stop_cond = self.get_stop_cond(iter, pre, obj)
 

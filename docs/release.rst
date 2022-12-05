@@ -1,6 +1,12 @@
 Release History
 ===============
 
+Version 0.2.5
+-------------
+- Fix issues # 19_ and # 20_ in GitHub repo
+- Fix bugs in plotting function, plot_range
+- Structurize model outputs
+
 Version 0.2.4
 -------------
 - Support the input of one or multiple genes trends to initialize cell time, see config.py, parameter self.IROOT
@@ -58,3 +64,6 @@ Version 0.1.2
 Version 0.1.0
 -------------
 - Alpha version of UniTVelo released
+
+.. _19: https://github.com/StatBiomed/UniTVelo/issues/19
+.. _20: https://github.com/StatBiomed/UniTVelo/issues/20

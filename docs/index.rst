@@ -1,9 +1,11 @@
-|PyPI| |Docs| 
+|PyPI| |Docs| |Downloads|
 
 .. |PyPI| image:: https://img.shields.io/pypi/v/unitvelo.svg
     :target: https://pypi.org/project/unitvelo
 .. |Docs| image:: https://readthedocs.org/projects/unitvelo/badge/?version=latest
    :target: https://unitvelo.readthedocs.io
+.. |Downloads| image:: https://static.pepy.tech/personalized-badge/unitvelo?period=total&units=international_system&left_color=black&right_color=orange&left_text=Downloads
+   :target: https://github.com/StatBiomed/UniTVelo
 
 UniTVelo for temporally unified RNA velocity analysis
 =====================================================

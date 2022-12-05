@@ -2,7 +2,6 @@
 import tensorflow as tf
 import numpy as np
 import logging
-from .utils import min_max
 np.random.seed(42)
 
 exp = tf.math.exp
@@ -28,28 +27,12 @@ def col_minmax(matrix, gene_id=None):
 
 def exp_args(adata, K=1):
     if adata.uns['base_function'] == 'Gaussian':
-        columns = ['a0', 'h0', 'gamma', 'beta']
+        columns = ['a', 'h', 'gamma', 'beta']
     else:
         columns = ['gamma', 'beta']
         columns.extend([f'a{k}' for k in range(K)])
 
     return columns
-
-def is_nan(name=None, data=None, phase=None):
-    for id, para in enumerate(name):
-        if np.sum(np.isnan(data[id])) > 0:
-            print ('nan', para, phase)
-            print (np.argwhere(np.isnan(data[id])).shape)
-            import sys
-            sys.exit()
-
-def is_inf(name=None, data=None, phase=None):
-    for id, para in enumerate(name):
-        if np.sum(np.isinf(data[id])) > 0:
-            print ('inf', para, phase)
-            print (np.argwhere(np.isinf(data[id])).shape)
-            import sys
-            sys.exit()
 
 #%%
 class Model_Utils():
@@ -62,7 +45,6 @@ class Model_Utils():
         config=None
     ):
         self.adata = adata
-        self.mode = config.BASE_FUNCTION
         self.var_names = var_names
         self.Ms, self.Mu = Ms, Mu
         self.K = 1
@@ -75,62 +57,46 @@ class Model_Utils():
         ngenes = self.Ms.shape[1]
         ones = tf.ones((1, ngenes), dtype=tf.float32)
 
-        self.gamma = tf.Variable(ones * 0, name='log_gamma')
-        self.beta = tf.Variable(ones * 0, name='log_beta')
+        self.log_beta = tf.Variable(ones * 0, name='log_beta')
         self.intercept = tf.Variable(ones * 0, name='intercept')
 
-        if self.mode == 'Gaussian':
-            self.t = tf.Variable(ones * 0.5, name='t') #! mean of Gaussian
-            self.a = tf.Variable(ones * 0, name='log_a') #! 1 / scaling of Gaussian
-            self.offset = tf.Variable(ones * 0, name='offset')
+        self.t = tf.Variable(ones * 0.5, name='t') #! mean of Gaussian
+        self.log_a = tf.Variable(ones * 0, name='log_a') #! 1 / scaling of Gaussian
+        self.offset = tf.Variable(ones * 0, name='offset')
 
-            init_h = log(tf.math.reduce_max(self.Ms, axis=0))
-            self.h = tf.Variable(ones * init_h, name='log_h')
+        self.log_h = tf.Variable(ones * log(tf.math.reduce_max(self.Ms, axis=0)), name='log_h')
 
-            init_gamma = self.adata.var['velocity_gamma'].values
-            self.gamma = tf.Variable(log(
-                            tf.reshape(init_gamma, (1, self.adata.n_vars))), 
-                            name='log_gamma')
+        init_gamma = self.adata.var['velocity_gamma'].values
+        self.log_gamma = tf.Variable(
+            log(tf.reshape(init_gamma, (1, self.adata.n_vars))), 
+            name='log_gamma')
 
-            for id in np.where(init_gamma <= 0)[0]:
-                logging.info(f'name: {self.adata.var.index[id]}, gamma: {init_gamma[id]}')
+        for id in np.where(init_gamma <= 0)[0]:
+            logging.info(f'name: {self.adata.var.index[id]}, gamma: {init_gamma[id]}')
 
-            self.gamma = tf.Variable(
-                tf.where(tf.math.is_finite(self.gamma), self.gamma, 0), 
-                name='log_gamma')
+        self.log_gamma = tf.Variable(
+            tf.where(tf.math.is_finite(self.log_gamma), self.log_gamma, 0), 
+            name='log_gamma')
 
-            if self.config.VGENES == 'offset':
-                init_inter = self.adata.var['velocity_inter'].values
-                self.intercept = \
-                    tf.Variable(
-                        tf.reshape(init_inter, (1, self.adata.n_vars)), 
-                        name='intercept')
+        if self.config.VGENES == 'offset':
+            init_inter = self.adata.var['velocity_inter'].values
+            self.intercept = \
+                tf.Variable(
+                    tf.reshape(init_inter, (1, self.adata.n_vars)), 
+                    name='intercept')
 
-            if type(self.config.GENE_PRIOR) == list:
-                vgenes_temp = []
-                prior_t = np.ones((1, ngenes), dtype=np.float32) * 0.5
-                for prior in self.config.GENE_PRIOR:
-                    prior_t[0][prior[2]] = 1.1 if prior[1] == 'increase' else -0.2
-                    vgenes_temp.append(prior + (prior_t[0][prior[2]], ))
-                self.t = tf.Variable(prior_t, name='t')
-                print (f'Modified GENE_PRIOR {vgenes_temp} with init_tau')
-         
-        if self.mode == 'Mixture':
-            init_t = np.reshape(np.sort(np.random.uniform(-1, 1, self.K)), (-1, 1))
-            init_h = np.reshape(2 * np.array([k % 2 for k in range(self.K)]) - 1, (-1, 1))
-
-            self.t = tf.Variable(tf.ones((self.K, ngenes)) * init_t, name='t')
-            self.a = tf.Variable(tf.zeros((self.K, ngenes)), name='log_a')
-            self.h = tf.Variable(tf.ones((self.K, ngenes)) * init_h * 7, name='h')
-            self.offset = tf.Variable(tf.zeros((self.K, ngenes)), name='offset')
+        if type(self.config.GENE_PRIOR) == list:
+            vgenes_temp = []
+            prior_t = np.ones((1, ngenes), dtype=np.float32) * 0.5
+            for prior in self.config.GENE_PRIOR:
+                prior_t[0][prior[2]] = 1.1 if prior[1] == 'increase' else -0.2
+                vgenes_temp.append(prior + (prior_t[0][prior[2]], ))
+            self.t = tf.Variable(prior_t, name='t')
+            print (f'Modified GENE_PRIOR {vgenes_temp} with init_tau')
 
     def init_pars(self):
         self.default_pars_names = ['gamma', 'beta']
-        self.default_pars_names += [f'offset{k}' for k in range(self.K)]
-        self.default_pars_names += [f'a{k}' for k in range(self.K)]
-        self.default_pars_names += [f't{k}' for k in range(self.K)]
-        self.default_pars_names += [f'h{k}' for k in range(self.K)]
-        self.default_pars_names += ['intercept']
+        self.default_pars_names += ['offset', 'a', 't', 'h', 'intercept']
 
     def init_weights(self, weighted=False):
         nonzero_s, nonzero_u = self.Ms > 0, self.Mu > 0
@@ -162,46 +128,15 @@ class Model_Utils():
         return lr_schedule
 
     def get_fit_s(self, args, t_cell):
-        if self.mode == 'Gaussian':
-            self.fit_s = exp(args[5]) * \
-                exp(-exp(args[3]) * square(t_cell - args[4])) + \
-                args[2]
-        
-        if self.mode == 'Mixture':
-            fit_s = args[5][0, :] * \
-                exp(-exp(args[3][0, :]) * square(t_cell - args[4][0, :])) + \
-                args[2][0, :]
-            fit_s = tf.expand_dims(fit_s, axis=0)
-
-            for k in range(1, self.K):
-                temp = args[5][k, :] * \
-                    exp(-exp(args[3][k, :]) * square(t_cell - args[4][k, :])) + \
-                    args[2][k, :]
-                temp = tf.expand_dims(temp, axis=0)
-                fit_s = tf.concat([fit_s, temp], axis=0)
-
-            self.ori_s = fit_s
-            self.fit_s = sum(fit_s, axis=0)
+        self.fit_s = exp(args[5]) * \
+            exp(-exp(args[3]) * square(t_cell - args[4])) + \
+            args[2]
 
         return self.fit_s
     
     def get_s_deri(self, args, t_cell):
-        if self.mode == 'Gaussian':
-            self.s_deri = (self.fit_s - args[2]) * \
-                (-exp(args[3]) * 2 * (t_cell - args[4]))
-        
-        if self.mode == 'Mixture':
-            s_deri = (self.ori_s[0, :, :] - args[2][0, :]) * \
-                (-exp(args[3][0, :]) * 2 * (t_cell - args[4][0, :]))
-            s_deri = tf.expand_dims(s_deri, axis=0)
-
-            for k in range(1, self.K):
-                temp_deri = (self.ori_s[k, :, :] - args[2][k, :]) * \
-                    (-exp(args[3][k, :]) * 2 * (t_cell - args[4][k, :]))
-                temp_deri = tf.expand_dims(temp_deri, axis=0)
-                s_deri = tf.concat([s_deri, temp_deri], axis=0)
-            
-            self.s_deri = sum(s_deri, axis=0)
+        self.s_deri = (self.fit_s - args[2]) * \
+            (-exp(args[3]) * 2 * (t_cell - args[4]))
 
         return self.s_deri
 
@@ -243,7 +178,6 @@ class Model_Utils():
 
         if self.config.DENSITY == 'Raw':
             weight = self.gene_prior_perc(dis)
-            # print (f'{weight[0][254], weight[0][22], weight[0][0]}')
             return tf.cast(sum(dis * weight, axis=1), tf.float32)
 
     def gene_prior_perc(self, dis):
@@ -324,9 +258,6 @@ class Model_Utils():
         return new_loc
 
     def init_time(self, boundary, shape=None):
-        if self.mode == 'Mixture':
-            boundary = (0, 1)
-
         x = tf.linspace(boundary[0], boundary[1], shape[0])
 
         try:

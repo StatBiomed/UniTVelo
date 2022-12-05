@@ -1,12 +1,11 @@
 import tensorflow as tf
 import numpy as np
-import logging
 from scvelo.tools.utils import make_unique_list
 from tqdm import tqdm
 import scvelo as scv
 from .optimize_utils import Model_Utils, exp_args
 from .utils import save_vars, new_adata_col, min_max
-from .pl import plot_phase_portrait, plot_loss
+from .pl import plot_loss
 
 exp = tf.math.exp
 log = tf.math.log
@@ -39,7 +38,6 @@ class Recover_Paras(Model_Utils):
         )
 
         self.idx = idx
-        self.pars = []
         self.rep = rep
         self.scaling = adata.var['scaling'].values
         self.flag = True
@@ -51,7 +49,7 @@ class Recover_Paras(Model_Utils):
         self.t_cell = self.compute_cell_time(args=None)
         self.pi = tf.constant(np.pi, dtype=tf.float32)
 
-    def compute_cell_time(self, args=None, iter=None):
+    def compute_cell_time(self, args=None, iter=None, show=False):
         if args != None:
             boundary = (args[4] - 3 * (1 / sqrt(2 * exp(args[3]))), 
                         args[4] + 3 * (1 / sqrt(2 * exp(args[3]))))
@@ -70,11 +68,11 @@ class Recover_Paras(Model_Utils):
                 t_cell = tf.reshape(t_cell, (-1, 1))
                 t_cell = tf.broadcast_to(t_cell, self.adata.shape)
             
-            plot_phase_portrait(self.adata, args, Ms, Mu, s_predict, u_predict)
+            # plot_phase_portrait(self.adata, args, Ms, Mu, s_predict, u_predict)
 
         else:
-            boundary = (self.t - 3 * (1 / sqrt(2 * exp(self.a))), 
-                        self.t + 3 * (1 / sqrt(2 * exp(self.a))))
+            boundary = (self.t - 3 * (1 / sqrt(2 * exp(self.log_a))), 
+                        self.t + 3 * (1 / sqrt(2 * exp(self.log_a))))
 
             t_cell = self.init_time((0, 1), self.adata.shape)
 
@@ -120,7 +118,7 @@ class Recover_Paras(Model_Utils):
                 t_cell = tf.cast(tf.broadcast_to(np.sum(t_cell, axis=0).reshape(-1, 1), self.adata.shape), tf.float32)
 
             elif self.config.IROOT in self.adata.obs[self.adata.uns['label']].values:
-                print ('---> Use Diffusion Pseudotime as initial.')
+                print ('Use diffusion pseudotime as initial.')
                 import scanpy as sc
                 sc.tl.diffmap(self.adata)
                 self.adata.uns['iroot'] = \
@@ -129,7 +127,9 @@ class Recover_Paras(Model_Utils):
                     )[0]
                 sc.tl.dpt(self.adata)
 
-                scv.pl.scatter(self.adata, color='dpt_pseudotime', cmap='gnuplot', dpi=100)
+                if show:
+                    scv.pl.scatter(self.adata, color='dpt_pseudotime', cmap='gnuplot', dpi=100)
+                
                 t_cell = tf.cast(
                     tf.broadcast_to(
                         self.adata.obs['dpt_pseudotime'].values.reshape(-1, 1), 
@@ -179,7 +179,7 @@ class Recover_Paras(Model_Utils):
         self.adata.var['amplify_infi'] = self.infi_genes
         print (f'# of infinite (or nan) genes {self.infi_genes.sum()}')
 
-    def compute_loss(self, args, t_cell, Ms, Mu, iter, qc_trick):
+    def compute_loss(self, args, t_cell, Ms, Mu, iter, progress_bar):
         self.s_func, self.u_func = self.get_s_u(args, t_cell)
         udiff, sdiff = Mu - self.u_func, Ms - self.s_func
 
@@ -212,10 +212,10 @@ class Recover_Paras(Model_Utils):
                 - (Ms.shape[0] / 2) * log(2 * self.pi * self.vars) \
                 - sum(self.s_r2, axis=0) / (2 * self.vars) 
 
-            error_1 = sum(self.u_r2, axis=0).numpy()[self.total_genes]
-            error_2 = sum(self.s_r2, axis=0).numpy()[self.total_genes]
-            self.se.append(int(np.sum(error_1) + np.sum(error_2)))
-            qc_trick.set_description(f'{self.se[-1]:,}')
+            error_1 = np.sum(sum(self.u_r2, axis=0).numpy()[self.total_genes]) / np.sum(self.total_genes)
+            error_2 = np.sum(sum(self.s_r2, axis=0).numpy()[self.total_genes]) / np.sum(self.total_genes)
+            self.se.append(error_1 + error_2)
+            progress_bar.set_description(f'Loss (Total): {self.se[-1]:.3f}, (Spliced): {error_2:.3f}, (Unspliced): {error_1:.3f}')
 
             return self.get_loss(iter,
                                 sum(self.s_r2, axis=0), 
@@ -244,9 +244,10 @@ class Recover_Paras(Model_Utils):
                 - (Ms.shape[0] / 2) * log(2 * self.pi * self.vars) \
                 - sum(self.s_r2, axis=0) / (2 * self.vars) 
 
-            error = sum(self.u_r2 + self.s_r2, axis=0).numpy()[self.idx]
-            self.se.append(int(np.sum(error)))
-            qc_trick.set_description(f'{self.se[-1]:,}')
+            error_1 = np.sum(sum(self.u_r2, axis=0).numpy()[self.idx]) / np.sum(self.idx)
+            error_2 = np.sum(sum(self.s_r2, axis=0).numpy()[self.idx]) / np.sum(self.idx)
+            self.se.append(error_1 + error_2)
+            progress_bar.set_description(f'Loss (Total): {self.se[-1]:.3f}, (Spliced): {error_2:.3f}, (Unspliced): {error_1:.3f}')
             
             self.vgene_loss = self.se[-1]
             return self.get_loss(iter,
@@ -255,29 +256,33 @@ class Recover_Paras(Model_Utils):
 
     def fit_likelihood(self):
         Ms, Mu, t_cell = self.Ms, self.Mu, self.t_cell
-        gamma, beta, offset = self.gamma, self.beta, self.offset
+        log_gamma, log_beta, offset = self.log_gamma, self.log_beta, self.offset
         intercept = self.intercept
-        a, t, h = self.a, self.t, self.h
+        log_a, t, log_h = self.log_a, self.t, self.log_h
 
-        optimizer = tf.keras.optimizers.Adam(learning_rate=self.init_lr, amsgrad=True)
+        from packaging import version
+        if version.parse(tf.__version__) >= version.parse('2.11.0'):
+            optimizer = tf.keras.optimizers.legacy.Adam(learning_rate=self.init_lr, amsgrad=True)
+        else:
+            optimizer = tf.keras.optimizers.Adam(learning_rate=self.init_lr, amsgrad=True)
+        
         pre = tf.repeat(1e6, Ms.shape[1]) # (2000, )
-
         self.se, self.m_args, self.m_ur2, self.m_sr2 = [], None, None, None
         self.m_ullf, self.m_sllf = None, None
 
-        qc_trick = tqdm(range(self.config.MAX_ITER))
-        for iter in qc_trick:
+        progress_bar = tqdm(range(self.config.MAX_ITER))
+        for iter in progress_bar:
             with tf.GradientTape() as tape:                
                 args = [
-                    gamma, 
-                    beta, 
+                    log_gamma, 
+                    log_beta, 
                     offset, 
-                    a, 
+                    log_a, 
                     t, 
-                    h, 
+                    log_h, 
                     intercept
                 ]
-                obj = self.compute_loss(args, t_cell, Ms, Mu, iter, qc_trick)
+                obj = self.compute_loss(args, t_cell, Ms, Mu, iter, progress_bar)
 
             stop_cond = self.get_stop_cond(iter, pre, obj)
 
@@ -322,18 +327,6 @@ class Recover_Paras(Model_Utils):
                 convert = tf.cast(self.idx, tf.float32)
                 processed_grads = [g * convert for g in gradients]
 
-            # if (type(self.config.GENE_PRIOR) == list) & (self.config.FIT_OPTION == '1'):
-            #     update = np.ones((1, Ms.shape[1]))
-            #     for prior in self.config.GENE_PRIOR:
-            #         update[0][prior[2]] = 0
-
-            #     if len(processed_grads) == 4:
-            #         processed_grads[2] = processed_grads[2] * update
-            #         logging.info(f'iter {iter}, {self.config.GENE_PRIOR[0][0]}, {processed_grads[2].numpy()[0][self.config.GENE_PRIOR[0][2]], args[4].numpy()[0][self.config.GENE_PRIOR[0][2]]}, {self.config.GENE_PRIOR[1][0]}, {processed_grads[2].numpy()[0][self.config.GENE_PRIOR[1][2]], args[4].numpy()[0][self.config.GENE_PRIOR[1][2]]}')
-            #     if len(processed_grads) == 7:
-            #         processed_grads[4] = processed_grads[4] * update
-            #         logging.info(f'iter {iter}, {self.config.GENE_PRIOR[0][0]}, {processed_grads[4].numpy()[0][self.config.GENE_PRIOR[0][2]], args[4].numpy()[0][self.config.GENE_PRIOR[0][2]]}, {self.config.GENE_PRIOR[1][0]}, {processed_grads[4].numpy()[0][self.config.GENE_PRIOR[1][2]], args[4].numpy()[0][self.config.GENE_PRIOR[1][2]]}')
-
             optimizer.apply_gradients(zip(processed_grads, args_to_optimize))
             pre = obj
 
@@ -372,11 +365,8 @@ class Recover_Paras(Model_Utils):
             if self.config.FILTER_CELLS \
             else sum(self.m_ur2, axis=0) / self.Ms.shape[0]
 
-        bic_k = 7 if self.config.FIT_OPTION == '1' else 4
-        gene_bic = bic_k * log(tf.cast(self.Ms.shape[0], tf.float32)) - 2 * self.m_ullf
-
-        list_name = ['fit_loss', 'fit_bic', 'fit_llf']
-        list_data = [gene_loss.numpy(), gene_bic.numpy(), self.m_ullf.numpy()]
+        list_name = ['fit_loss', 'fit_llf']
+        list_data = [gene_loss.numpy(), self.m_ullf.numpy()]
         new_adata_col(self.adata, list_name, list_data)
 
         # Mimimum loss during optimization, might not be the actual minimum
@@ -388,32 +378,15 @@ class Recover_Paras(Model_Utils):
 
         tloss = min(self.se[self.agenes_thres + 1:])
         self.adata.uns['loss'] = self.vgene_loss
-        print (f'Total loss {tloss}, vgene loss {self.vgene_loss}')
-
-    def write_pars(self, pars, add_key="fit"):
-        for i, name in enumerate(self.default_pars_names):
-            self.adata.var[f"{add_key}_{name}"] = np.transpose(pars[i])
-        
-        columns = exp_args(self.adata, self.K)
-        for col in columns:
-            self.adata.var[f"{add_key}_{col}"] = \
-                np.exp(self.adata.var[f"{add_key}_{col}"])
-
-    def read_pars(self, parameter):
-        if parameter.shape[0] > 1:
-            for i in range(parameter.shape[0]):
-                # par = np.zeros(self.adata.n_vars) * np.nan
-                par = np.squeeze(parameter[i, :])
-                self.pars.append(par)
-        else:
-            # par = np.zeros(self.adata.n_vars) * np.nan
-            par = np.squeeze(parameter)
-            self.pars.append(par)
+        print (f'Total loss {tloss:.3f}, vgene loss {self.vgene_loss:.3f}')
 
     def save_pars(self, paras):
-        for i in range(len(paras)):
-            self.read_pars(paras[i])
-        self.write_pars(self.pars)
+        columns = exp_args(self.adata, 1)
+        for i, name in enumerate(self.default_pars_names):
+            self.adata.var[f"fit_{name}"] = np.transpose(np.squeeze(paras[i]))
+
+            if name in columns:
+                self.adata.var[f"fit_{name}"] = np.exp(self.adata.var[f"fit_{name}"])            
 
 def lagrange(
     adata,

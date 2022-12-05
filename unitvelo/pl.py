@@ -62,20 +62,26 @@ def plot_zero_gene_distribution(nonzero_para, zero_para, adata=None):
     plt.show()
     fig.savefig(os.path.join(adata.uns['temp'], 'Gene_Filter_ByZero_Distribution.png'), dpi=300)
 
+def rbf(x, height, sigma, tau, offset_rbf):
+    return height * np.exp(-sigma * (x - tau) * (x - tau)) + offset_rbf
+
+def rbf_deri(x, height, sigma, tau, offset_rbf):
+    return (rbf(x, height, sigma, tau, offset_rbf)  - offset_rbf) * (-sigma * 2 * (x - tau))
+
+def rbf_u(x, height, sigma, tau, offset_rbf, beta, gamma, intercept):
+    return (rbf_deri(x, height, sigma, tau, offset_rbf) + gamma * rbf(x, height, sigma, tau, offset_rbf)) / beta + intercept
+
 def plot_range(
     gene_name, 
     adata, 
     config_file=None, 
     save_fig=False, 
     show_ax=False,
-    show_legend=False,
+    show_legend=True,
     show_details=False,
     time_metric='latent_time',
-    show_temporal=False,
-    show_positive=False,
-    t_left=None,
-    t_right=None,
     palette='tab20',
+    size=20,
     ncols=1
 ):
     """
@@ -110,129 +116,76 @@ def plot_range(
         exam_genes(adata, gene_name, time_metric=time_metric)
 
     else:
-        from .optimize_utils import exp_args, Model_Utils
-        f = Validation(adata, time_metric=time_metric)
-        f.init_data(adata)
-        f.concat_data()
-        f.vars_trends(gene_name, adata)
+        gene_name = gene_name if type(gene_name) == list else [gene_name]
+        figs = []    
 
-        scaling = adata.var.loc[gene_name]['scaling']
-        f.para['beta'] *= scaling
-        f.para['intercept'] /= scaling
+        for gn in gene_name:
+            fig, axes = plt.subplots(
+                    nrows=1,
+                    ncols=3, 
+                    figsize=(18, 4)
+            )
+            gdata = adata[:, gn]
 
-        columns = exp_args(adata)
-        for col in columns:
-            f.para[col] = np.log(f.para[col])
-
-        boundary = (f.para['t0'] - 3 * (1 / np.sqrt(2 * np.exp(f.para['a0']))), 
-                    f.para['t0'] + 3 * (1 / np.sqrt(2 * np.exp(f.para['a0']))))
-        
-        validate = Model_Utils(config=config_file)
-        spre, upre = f.func(validate, validate.init_time(boundary, (3000, 1)))
-        sone, uone = f.func(validate, validate.init_time((0, 1), (3000, 1)))
-        upre, uone = upre * scaling, uone * scaling
-
-        fig, ax = plt.subplots()
-        if not show_ax:
-            ax.axis("off")
-
-        g = sns.scatterplot(np.squeeze(adata[:, gene_name].layers['Ms']), 
-                            np.squeeze(adata[:, gene_name].layers['Mu']), 
-                            s=20, hue=adata.obs[adata.uns['label']], 
-                            palette=palette)
-                            
-        plt.plot(np.squeeze(spre), np.squeeze(upre), color='lightgrey', linewidth=2)
-        plt.plot(np.squeeze(sone), np.squeeze(uone), color='black', linewidth=2)
-        plt.xlim([
-            -0.005 if adata[:, gene_name].layers['Ms'].min() < 1
-                else adata[:, gene_name].layers['Ms'].min() * 0.95, 
-            adata[:, gene_name].layers['Ms'].max() * 1.05])
-        plt.ylim([
-            -0.005 if adata[:, gene_name].layers['Mu'].min() < 1
-                else adata[:, gene_name].layers['Mu'].min() * 0.95, 
-            adata[:, gene_name].layers['Mu'].max() * 1.05])
-
-        if not show_legend:
-            g.get_legend().remove()
-
-        plt.xlabel('Spliced')
-        plt.ylabel('Unspliced')
-        plt.title(gene_name, fontsize=12)
-        plt.show()
-
-        if save_fig:
-            plt.savefig(os.path.join(adata.uns['temp'], f'GM_{gene_name}.png'), dpi=300, bbox_inches='tight')
-        
-        #! solving the starting and ending timepoint of phase portraits afterwards
-        if show_temporal:
-            f.vars_trends(gene_name, adata)
-            fit_left = f.fs[f'{gene_name}_fits'][np.argwhere(f.lt == 0)[0][0]]
-            fit_right = f.fs[f'{gene_name}_fits'][np.argwhere(f.lt == 1)[0][0]]
+            boundary = (gdata.var.fit_t.values - 3 * (1 / np.sqrt(2 * np.exp(gdata.var.fit_a.values))), 
+                        gdata.var.fit_t.values + 3 * (1 / np.sqrt(2 * np.exp(gdata.var.fit_a.values))))
             
-            def get_reversed_data(fit_left, fit_right, t_left=None, t_right=None):
-                t_left = np.sqrt(np.log((fit_left - f.para.offset0) / f.para.h0) / (-f.para.a0)) + f.para.t0 \
-                    if t_left == None else t_left
-                t_right = np.sqrt(np.log((fit_right - f.para.offset0) / f.para.h0) / (-f.para.a0)) + f.para.t0 \
-                    if t_right == None else t_right
-                print (t_left, t_right, f.para.t0)
+            t_one = np.linspace(0, 1, 1000)
+            t_boundary = np.linspace(boundary[0], boundary[1], 2000)
 
-                if f.para.t0 > 0 and f.para.t0 <= 0.5 and t_left == None:
-                        t_left = \
-                            -np.sqrt(np.log((fit_left - f.para.offset0) / f.para.h0) / (-f.para.a0)) \
-                            + f.para.t0
+            spre = np.squeeze(rbf(t_boundary, gdata.var.fit_h.values, gdata.var.fit_a.values, gdata.var.fit_t.values, gdata.var.fit_offset.values))
+            sone = np.squeeze(rbf(t_one, gdata.var.fit_h.values, gdata.var.fit_a.values, gdata.var.fit_t.values, gdata.var.fit_offset.values))
 
-                t_left = 0 if np.isnan(t_left) else t_left
-                t_right = 1 if np.isnan(t_right) else t_right
-                print (t_left, t_right, f.para.t0)
+            upre = np.squeeze(rbf_u(t_boundary, gdata.var.fit_h.values, gdata.var.fit_a.values, gdata.var.fit_t.values, gdata.var.fit_offset.values, gdata.var.fit_beta.values, gdata.var.fit_gamma.values, gdata.var.fit_intercept.values))
+            uone = np.squeeze(rbf_u(t_one, gdata.var.fit_h.values, gdata.var.fit_a.values, gdata.var.fit_t.values, gdata.var.fit_offset.values, gdata.var.fit_beta.values, gdata.var.fit_gamma.values, gdata.var.fit_intercept.values))
 
-                t_left = max(t_left, 0) if t_left <= 1 else 0
-                t_right = min(t_right, 1)
-                print (t_left, t_right, f.para.t0)
-                
-                t = np.linspace(t_left, t_right, 1000)
-                s = f.para.h0 * np.exp(-f.para.a0 * ((t - f.para.t0) ** 2)) + f.para.offset0
-                sde = s * (-2 * f.para.a0 * (t - f.para.t0))
-                u = (sde + f.para.gamma * s) / f.para.beta + f.para.intercept
-                t_reverse = (t - t.min()) / (t.max() - t.min())
-
-                return s, u, t_reverse, t_left, t_right
-            
-            s, u, t_re, t_left, t_right = get_reversed_data(fit_left, fit_right, t_left, t_right)
-            
-            if show_positive:
-                s = np.where(s < 0, 0, s)
-                u = np.where(u < 0, 0, u)
-
-            fig, axes = plt.subplots(1, 2, figsize=(12, 4))
-            if not show_ax:
-                axes[0].axis("off")
-                axes[1].axis("off")
-
-            g1 = sns.scatterplot(np.squeeze(adata.obs[time_metric].values), 
-                                np.squeeze(adata[:, gene_name].layers['Ms']), 
-                                s=20, hue=adata.obs[adata.uns['label']], 
+            g1 = sns.scatterplot(x=np.squeeze(gdata.layers['Ms']), 
+                                y=np.squeeze(gdata.layers['Mu']), 
+                                s=size, hue=adata.obs[adata.uns['label']], 
                                 palette=palette, ax=axes[0])
-            sns.lineplot(t_re, s, color='black', linewidth=2, ax=axes[0])
+            axes[0].plot(spre, upre, color='lightgrey', linewidth=2, label='Predicted Curve')
+            axes[0].plot(sone, uone, color='black', linewidth=2, label='Predicted Curve Time 0-1')
+            axes[0].set_xlabel('Spliced Reads')
+            axes[0].set_ylabel('Unspliced Reads')
 
-            axes[0].set_xlabel('Inferred Cell Time')
-            axes[0].set_ylabel('Spliced')
+            axes[0].set_xlim([-0.005 if gdata.layers['Ms'].min() < 1
+                    else gdata.layers['Ms'].min() * 0.95, 
+                    gdata.layers['Ms'].max() * 1.05])
+            axes[0].set_ylim([-0.005 if gdata.layers['Mu'].min() < 1
+                    else gdata.layers['Mu'].min() * 0.95, 
+                    gdata.layers['Mu'].max() * 1.05])
 
-            g2 = sns.scatterplot(np.squeeze(adata.obs[time_metric].values), 
-                                np.squeeze(adata[:, gene_name].layers['Mu']), 
-                                s=20, hue=adata.obs[adata.uns['label']], 
+            g2 = sns.scatterplot(x=np.squeeze(adata.obs[time_metric].values), 
+                                y=np.squeeze(gdata.layers['Ms']), 
+                                s=size, hue=adata.obs[adata.uns['label']], 
                                 palette=palette, ax=axes[1])
-            sns.lineplot(t_re, u, color='black', linewidth=2, ax=axes[1])
+            sns.lineplot(x=t_one, y=sone, color='black', linewidth=2, ax=axes[1])
 
             axes[1].set_xlabel('Inferred Cell Time')
-            axes[1].set_ylabel('Unspliced')
+            axes[1].set_ylabel('Spliced')
+
+            g3 = sns.scatterplot(x=np.squeeze(adata.obs[time_metric].values), 
+                                y=np.squeeze(gdata.layers['Mu']), 
+                                s=size, hue=adata.obs[adata.uns['label']], 
+                                palette=palette, ax=axes[2])
+            sns.lineplot(x=t_one, y=uone, color='black', linewidth=2, ax=axes[2])
+
+            axes[2].set_xlabel('Inferred Cell Time')
+            axes[2].set_ylabel('Unspliced')
+
+            # if not show_ax:
+            #     axes.axis("off")
 
             if not show_legend:
                 g1.get_legend().remove()
                 g2.get_legend().remove()
+                g3.get_legend().remove()
 
+            axes[1].set_title(gn, fontsize=12)
             plt.show()
+
             if save_fig:
-                plt.savefig(os.path.join(adata.uns['temp'], f'GM_{gene_name}_temporal.png'), dpi=300, bbox_inches='tight')
+                plt.savefig(os.path.join(adata.uns['temp'], f'GM_{gn}.png'), dpi=300, bbox_inches='tight')
 
 def plot_phase_portrait(adata, args, sobs, uobs, spre, upre):
     if 'examine_genes' in adata.uns.keys():
@@ -242,12 +195,6 @@ def plot_phase_portrait(adata, args, sobs, uobs, spre, upre):
 
         examine.plot_mf(adata, sobs, uobs, axes[0])
         examine.plot_mf(adata, spre, upre, axes[0])
-
-        if adata.uns['base_function'] == 'Piecewise':
-            u = np.linspace(0, np.max(np.squeeze(uobs)), 200)
-            s = np.squeeze(np.exp(args[1]) * u / np.exp(args[0]))
-            sns.scatterplot(x=s, y=u, s=10, color='black', ax=axes[0])
-
         plt.show()
     
     else:

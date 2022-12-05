@@ -2,9 +2,8 @@ import numpy as np
 import os
 import pandas as pd
 from .model import lagrange
-from .utils import make_dense, get_weight, R2, new_adata_col
+from .utils import make_dense, get_weight, R2
 import scvelo as scv
-from tqdm.notebook import tqdm
 import tensorflow as tf
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
@@ -34,7 +33,7 @@ class Velocity:
         n_obs, n_vars = self.Ms.shape
         self.gamma = np.zeros(n_vars, dtype=np.float32)
         self.r2 = np.zeros(n_vars, dtype=np.float32)
-        self.velocity_genes = np.ones(n_vars, dtype=np.bool)
+        self.velocity_genes = np.ones(n_vars, dtype=bool)
         self.residual_scale = np.zeros([n_obs, n_vars], dtype=np.float32)
     
         self.perc = perc
@@ -62,7 +61,7 @@ class Velocity:
         self.residual_scale = self.Mu - self.gamma_ref * self.Ms
         self.r2 = R2(self.residual_scale, total=self.Mu - np.mean(self.Mu, axis=0))
 
-        self.velocity_genes = np.ones(Ms.shape[1], dtype=np.bool)
+        self.velocity_genes = np.ones(Ms.shape[1], dtype=bool)
 
         if type(self.config.VGENES) == str and \
             self.config.VGENES in self.adata.var.index:
@@ -100,7 +99,7 @@ class Velocity:
                 & (np.max(self.Ms > 0, axis=0) > 0)
                 & (np.max(self.Mu > 0, axis=0) > 0)
             )
-            print (f'---> # of velocity genes used {self.velocity_genes.sum()}')
+            print (f'# of velocity genes {self.velocity_genes.sum()} (Criterion: positive regression coefficient between un/spliced counts)')
             
             if self.config.R2_ADJUST:
                 lb, ub = np.nanpercentile(self.scaling, [10, 90])
@@ -109,7 +108,7 @@ class Velocity:
                     & (self.scaling > np.min([lb, 0.03]))
                     & (self.scaling < np.max([ub, 3]))
                 )
-            print (f'---> # of velocity genes used {self.velocity_genes.sum()}')
+            print (f'# of velocity genes {self.velocity_genes.sum()} (Criterion: std of un/spliced reads should be moderate, w/o extreme values)')
 
             self.adata.var['velocity_gamma'] = self.gamma_ref
             self.adata.var['velocity_r2'] = self.r2
@@ -160,7 +159,7 @@ class Velocity:
         self.adata.var['intercept'] = df_gamma['inter'].values
         return residual
 
-    def fit_linear(self, idx, Ms, Mu, method='bic', coarse=False):
+    def fit_linear(self, idx, Ms, Mu, method='vgene_offset', coarse=False):
         '''
         [bic] for linear BIC comparison with algorithm BIC
         [kinetic] for selection of cyclic kinetic gene and monotonic expression gene
@@ -176,7 +175,7 @@ class Velocity:
                 columns=['coef', 'inter', 'r2'])
 
             reg = linear_model.LinearRegression()
-            for col in tqdm(range(Ms.shape[1])):
+            for col in range(Ms.shape[1]):
                 if not coarse:
                     sobs = np.reshape(Ms[:, col], (-1, 1))
                     uobs = np.reshape(Mu[:, col], (-1, 1))
@@ -196,8 +195,8 @@ class Velocity:
                 reg.fit(sobs, uobs)
                 u_pred = reg.predict(sobs)
 
-                linear.loc[index[col], 'coef'] = reg.coef_
-                linear.loc[index[col], 'inter'] = reg.intercept_
+                linear.loc[index[col], 'coef'] = float(reg.coef_)
+                linear.loc[index[col], 'inter'] = float(reg.intercept_)
                 linear.loc[index[col], 'r2'] = r2_score(uobs, u_pred)
 
             self.adata.var['velocity_inter'] = np.array(linear['inter'].values)
@@ -214,7 +213,7 @@ class Velocity:
                 & (np.max(self.Ms > 0, axis=0) > 0)
                 & (np.max(self.Mu > 0, axis=0) > 0)
             )
-            print (f'---> # of velocity genes used {self.velocity_genes.sum()}')
+            print (f'# of velocity genes {self.velocity_genes.sum()} (Criterion: positive regression coefficient between un/spliced counts)')
 
             lb, ub = np.nanpercentile(self.scaling, [10, 90])
             self.velocity_genes = (
@@ -222,78 +221,39 @@ class Velocity:
                 & (self.scaling > np.min([lb, 0.03]))
                 & (self.scaling < np.max([ub, 3]))
             )
-            print (f'---> # of velocity genes used {self.velocity_genes.sum()}')
-
-        if method == 'bic':
-            import statsmodels.api as sm
-            adata_select = self.adata[:, idx]
-            index = adata_select.var.index
-            linear = pd.DataFrame(index=index, data=0, dtype=np.float32, 
-                columns=['coef', 'inter',  'r2', 'loss', 'bic', 'llf'])
-
-            for col in tqdm(range(Ms.shape[1])):
-                if self.config.FILTER_CELLS:
-                    nonzero_s = Ms[:, col] > 0
-                    nonzero_u = Mu[:, col] > 0
-                    valid = np.array(nonzero_s & nonzero_u, dtype=bool)
-                    sobs = np.reshape(Ms[:, col][valid], (-1, 1))
-                    uobs = np.reshape(Mu[:, col][valid], (-1, 1))
-
-                else:
-                    sobs = np.reshape(Ms[:, col], (-1, 1))
-                    uobs = np.reshape(Mu[:, col], (-1, 1))
-                
-                X, Y = sm.add_constant(sobs), uobs
-                model = sm.OLS(Y, X)
-                results = model.fit()
-
-                linear.loc[index[col], 'coef'] = results.params[1]
-                linear.loc[index[col], 'inter'] = results.params[0]
-                linear.loc[index[col], 'r2'] = results.rsquared
-                linear.loc[index[col], 'loss'] = results.mse_resid
-                linear.loc[index[col], 'bic'] = results.bic
-                linear.loc[index[col], 'llf'] = results.llf
-            
-            new_adata_col(self.adata,
-                ['li_coef', 'li_inter', 'li_r2', 'li_loss', 'li_bic', 'li_llf'], 
-                [linear['coef'].values, linear['inter'].values, linear['r2'].values, 
-                linear['loss'].values, linear['bic'].values, linear['llf'].values])
+            print (f'# of velocity genes {self.velocity_genes.sum()} (Criterion: std of un/spliced reads should be moderate, w/o extreme values)')
 
     def fit_curve(self, adata, idx, Ms_scale, Mu_scale, rep=1):
         physical_devices = tf.config.list_physical_devices('GPU')
 
         if len(physical_devices) == 0 or self.config.GPU == -1:
             tf.config.set_visible_devices([], 'GPU')
-            with tf.device('/cpu:0'):
-                residual, adata = lagrange(
-                    adata, idx=idx,
-                    Ms=Ms_scale, Mu=Mu_scale, 
-                    rep=rep, config=self.config
-                )
-
-            return residual, adata
+            device = '/cpu:0'
+            print ('No GPU device has been detected. Switch to CPU mode.')
 
         else:
-            assert self.config.GPU < len(physical_devices), \
-                'Please specify the correct GPU card.'
+            assert self.config.GPU < len(physical_devices), 'Please specify the correct GPU card.'
             tf.config.set_visible_devices(physical_devices[self.config.GPU], 'GPU')
 
             os.environ["CUDA_VISIBLE_DEVICES"] = f'{self.config.GPU}'
             for gpu in physical_devices:
                 tf.config.experimental.set_memory_growth(gpu, True)
 
-            with tf.device(f'/gpu:{self.config.GPU}'):
-                residual, adata = lagrange(
-                    adata, idx=idx,
-                    Ms=Ms_scale, Mu=Mu_scale, 
-                    rep=rep, config=self.config
-                )
+            device = f'/gpu:{self.config.GPU}'
+            print (f'Using GPU card: {self.config.GPU}')
 
-            return residual, adata
+        with tf.device(device):
+            residual, adata = lagrange(
+                adata, idx=idx,
+                Ms=Ms_scale, Mu=Mu_scale, 
+                rep=rep, config=self.config
+            )
+
+        return residual, adata
 
     def fit_velo_genes(self, basis='umap', rep=1):
         idx = self.velocity_genes
-        print (f'---> # of velocity genes used {idx.sum()}')
+        print (f'# of velocity genes {idx.sum()} (Criterion: genes have reads in more than 5% of total cells)')
 
         if self.config.RESCALE_DATA:
             Ms_scale, Mu_scale = \
@@ -306,13 +266,6 @@ class Velocity:
 
         if self.config.GENERAL == 'Curve':
             residual, adata = self.fit_curve(self.adata, idx, Ms_scale, Mu_scale, rep=rep)
-
-            if False:
-                self.fit_linear(idx, Ms_scale, Mu_scale, method='bic')
-
-                from .pl import plot_compare_bic, plot_compare_loss
-                plot_compare_loss(self.adata)
-                plot_compare_bic(self.adata)
 
         if self.config.GENERAL == 'Deterministic':
             residual = self.fit_deterministic(idx, self.Ms, self.Mu, Ms_scale, Mu_scale)

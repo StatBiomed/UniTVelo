@@ -5,9 +5,9 @@ from setuptools import setup, find_packages
 
 # version of cudatoolkit and tensorflow
 REQUIRED = [
-    'numpy',
+    'numpy>=1.20',
     'scikit-learn>=0.22',
-    'pandas==1.4.2',
+    'pandas',
     'scipy>=1.4.1',
     'seaborn',
     'matplotlib>=3.3.0',
@@ -30,7 +30,7 @@ with io.open(os.path.join(here, 'README.md'), encoding='utf-8') as f:
 
 setup(
     name='unitvelo',
-    version='0.2.4.3',
+    version='0.2.5',
     # use_scm_version=True,
     # setup_requires=['setuptools_scm'],
 

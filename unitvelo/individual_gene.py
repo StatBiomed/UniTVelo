@@ -144,8 +144,8 @@ class Validation():
             self.para[col] = np.log(self.para[col])
 
         boundary = (
-            np.reshape(self.para['t0'] - 3 * (1 / np.sqrt(2 * np.exp(self.para['a0']))), (1, 1)), 
-            np.reshape(self.para['t0'] + 3 * (1 / np.sqrt(2 * np.exp(self.para['a0']))), (1, 1))
+            np.reshape(self.para['t'] - 3 * (1 / np.sqrt(2 * np.exp(self.para['a']))), (1, 1)), 
+            np.reshape(self.para['t'] + 3 * (1 / np.sqrt(2 * np.exp(self.para['a']))), (1, 1))
         )
         
         adata = adata[:, gene_name]

@@ -3,6 +3,7 @@ import pandas as pd
 import os
 np.random.seed(42)
 import logging
+import scvelo as scv
 
 def get_cgene_list():
     s_genes_list = \
@@ -525,3 +526,91 @@ def prior_trend_valid(adata, gene_list=None, name='IROOT'):
     else:
         print (f'Modified {name} {vgenes_temp} with index')
         return vgenes_temp
+
+def init_config_summary(config=None):
+    from .config import Configuration
+    if config == None:
+        print (f'Model configuration file not specified. Default settings with unified-time mode will be used.')
+        config = Configuration()
+
+    if config.FIT_OPTION == '1':
+        config.DENSITY = 'SVD' if config.GENE_PRIOR == None else 'Raw'
+        config.REORDER_CELL = 'Soft_Reorder'
+        config.AGGREGATE_T = True
+
+    elif config.FIT_OPTION == '2':
+        config.DENSITY = 'Raw'
+        config.REORDER_CELL = 'Hard'
+        config.AGGREGATE_T = False
+
+    else:
+        raise ValueError('config.FIT_OPTION is invalid')
+
+    print ('------> Manully Specified Parameters <------')
+    config_ref = Configuration()
+    dict_input, dict_ref = vars(config), vars(config_ref)
+
+    para_used = []
+    for parameter in dict_ref:
+        if dict_input[parameter] != dict_ref[parameter]:
+            print (parameter, dict_input[parameter], sep=f':\t')
+            para_used.append(parameter)
+
+    print ('------> Model Configuration Settings <------')
+    default_para = ['N_TOP_GENES', 
+                    'LEARNING_RATE', 
+                    'FIT_OPTION', 
+                    'DENSITY', 
+                    'REORDER_CELL', 
+                    'AGGREGATE_T', 
+                    'R2_ADJUST', 
+                    'GENE_PRIOR', 
+                    'VGENES', 
+                    'IROOT']
+
+    for parameter in default_para:
+        if parameter not in para_used:
+            print (parameter, dict_ref[parameter], sep=f':\t')
+    
+    print ('--------------------------------------------')
+    print ('')
+    return config, para_used
+
+def init_adata_and_logs(adata, config, normalize=True):
+    if type(adata) == str:
+        data_path = adata
+        adata = scv.read(data_path)
+
+    else:
+        cwd = os.getcwd()
+        if os.path.exists(os.path.join(cwd, 'res')):
+            pass
+        else: os.mkdir(os.path.join(cwd, 'res'))
+
+        print (f'Current working dir is {cwd}.')
+        print (f'Results will be stored in res folder')
+        data_path = os.path.join(cwd, 'res', 'temp.h5ad')
+    
+    from .utils import remove_dir
+    remove_dir(data_path, adata)
+    logging.basicConfig(filename=os.path.join(adata.uns['temp'], 'logging.txt'),
+                        filemode='a',
+                        format='%(asctime)s, %(levelname)s, %(message)s',
+                        datefmt='%H:%M:%S',
+                        level=logging.INFO)
+
+    if normalize:
+        scv.pp.filter_and_normalize(adata, 
+                                    min_shared_counts=config.MIN_SHARED_COUNTS, 
+                                    n_top_genes=config.N_TOP_GENES)
+        print (f"Extracted {adata.var[adata.var['highly_variable'] == True].shape[0]} highly variable genes.")
+
+        print (f'Computing moments for {len(adata.var)} genes with n_neighbors: {config.N_NEIGHBORS} and n_pcs: {config.N_PCS}')
+        scv.pp.moments(adata, 
+                        n_pcs=config.N_PCS, 
+                        n_neighbors=config.N_NEIGHBORS)
+    else:
+        scv.pp.neighbors(adata)
+
+    print ('')
+    return adata, data_path

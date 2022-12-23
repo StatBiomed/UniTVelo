@@ -177,8 +177,8 @@ class Model_Utils():
             return tf.cast(mean(dis_approx, axis=1), tf.float32)
 
         if self.config.DENSITY == 'Raw':
-            weight = self.gene_prior_perc(dis)
-            return tf.cast(sum(dis * weight, axis=1), tf.float32)
+            # weight = self.gene_prior_perc(dis)
+            return tf.cast(mean(dis, axis=1), tf.float32)
 
     def gene_prior_perc(self, dis):
         perc, perc_idx = [], []

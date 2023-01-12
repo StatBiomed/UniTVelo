@@ -4,6 +4,7 @@ import os
 np.random.seed(42)
 import logging
 import scvelo as scv
+import tensorflow as tf
 
 def get_cgene_list():
     s_genes_list = \
@@ -287,8 +288,8 @@ def get_model_para(adata):
     var = adata.var.loc[adata.var['velocity_genes'] == True]
     var = var[[
         'scaling', 'fit_vars',
-        'fit_varu', 'fit_gamma', 'fit_beta', 'fit_offset0', 
-        'fit_a0', 'fit_t0', 'fit_h0', 
+        'fit_varu', 'fit_gamma', 'fit_beta', 'fit_offset', 
+        'fit_a', 'fit_t', 'fit_h', 
         'fit_intercept', 'fit_loss', 'fit_bic', 
         'fit_llf', 'fit_sr2', 'fit_ur2'
     ]]
@@ -306,7 +307,7 @@ def reverse_transient(adata, time_metric='latent_time'):
     adata.var['re_transit'] = False
     adata.var['qua_r2'] = -1.
     adata.var['rbf_r2'] = -1.
-    sigma_max = np.max(adata.var.loc[adata.var['velocity_genes'] == True]['fit_a0'])
+    sigma_max = np.max(adata.var.loc[adata.var['velocity_genes'] == True]['fit_a'])
     celltime = adata.obs[time_metric].values
     
     def quadratic(x, a, b, c):
@@ -443,10 +444,10 @@ def subset_prediction(adata_subset, adata, config=None):
     args = [
         np.broadcast_to(np.log(np.array(adata.var['fit_gamma'].values)), args_shape), 
         np.broadcast_to(np.log(np.array(adata.var['fit_beta'].values * scaling)), args_shape), 
-        np.broadcast_to(np.array(adata.var['fit_offset0'].values), args_shape), 
-        np.broadcast_to(np.log(np.array(adata.var['fit_a0'].values)), args_shape), 
-        np.broadcast_to(np.array(adata.var['fit_t0'].values), args_shape), 
-        np.broadcast_to(np.log(np.array(adata.var['fit_h0'].values)), args_shape), 
+        np.broadcast_to(np.array(adata.var['fit_offset'].values), args_shape), 
+        np.broadcast_to(np.log(np.array(adata.var['fit_a'].values)), args_shape), 
+        np.broadcast_to(np.array(adata.var['fit_t'].values), args_shape), 
+        np.broadcast_to(np.log(np.array(adata.var['fit_h'].values)), args_shape), 
         np.broadcast_to(np.array(adata.var['fit_intercept'].values / scaling), args_shape)
     ]
 

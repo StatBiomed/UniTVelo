@@ -296,8 +296,8 @@ class Recover_Paras(Model_Utils):
             if (iter > self.agenes_thres) & \
                 (iter == self.config.MAX_ITER - 1 or \
                 tf.math.reduce_all(stop_cond) == True or \
-                min(self.se[self.agenes_thres + 1:]) * 1.1 < self.se[-1] 
-                    if (iter > self.agenes_thres + 1) else False):
+                (min(self.se[self.agenes_thres + 1:]) * 1.1 < self.se[-1] 
+                    if (iter > self.agenes_thres + 1) else False)):
 
                 if (iter > int(0.9 * self.config.MAX_ITER)) & self.config.REG_LOSS & \
                     (min(self.se[self.agenes_thres:]) * 1.1 >= self.se[-1]):

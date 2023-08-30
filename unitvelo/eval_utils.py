@@ -79,12 +79,13 @@ def cross_boundary_correctness(
     scores = {}
     all_scores = {}
     
-    x_emb = adata.obsm[x_emb]
     if x_emb == "X_umap":
         v_emb = adata.obsm['{}_umap'.format(k_velocity)]
     else:
         v_emb = adata.obsm[[key for key in adata.obsm if key.startswith(k_velocity)][0]]
         
+    x_emb = adata.obsm[x_emb]
+    
     for u, v in cluster_edges:
         sel = adata.obs[k_cluster] == u
         nbs = adata.uns['neighbors']['indices'][sel] # [n * 30]
